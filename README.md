@@ -1,17 +1,3 @@
-Excellent. This is exactly the right time to align the two libraries conceptually.
-
-Below is an updated **MeshForge README** that:
-
-* Mirrors the clarity and structure of the Vectrix guide
-* Shows how MeshForge and Vectrix fit together
-* Uses the same tone and modular documentation style
-* Reinforces the authoring → ops → pack flow
-* Explicitly explains representation boundaries
-
-You can drop this in as your new `README.md`.
-
----
-
 # MeshForge
 
 MeshForge is a Java mesh authoring and packaging library designed for modern rendering pipelines.
