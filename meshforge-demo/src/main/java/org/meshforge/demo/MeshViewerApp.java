@@ -33,10 +33,12 @@ import java.util.List;
 
 public final class MeshViewerApp extends Application {
     private static final String[] SUPPORTED_EXT = new String[] {"*.obj", "*.stl", "*.ply", "*.off"};
+    private static final double TARGET_RADIUS = 2.0;
 
     private final Group world = new Group();
     private final Rotate rotX = new Rotate(-25, Rotate.X_AXIS);
     private final Rotate rotY = new Rotate(30, Rotate.Y_AXIS);
+    private PerspectiveCamera camera;
     private Label status;
 
     private double dragStartX;
@@ -71,7 +73,7 @@ public final class MeshViewerApp extends Application {
         SubScene sub = new SubScene(root3d, 1000, 700, true, null);
         sub.setFill(Color.rgb(28, 31, 38));
 
-        PerspectiveCamera camera = new PerspectiveCamera(true);
+        camera = new PerspectiveCamera(true);
         camera.setNearClip(0.01);
         camera.setFarClip(10_000.0);
         camera.setTranslateZ(-8.0);
@@ -130,6 +132,7 @@ public final class MeshViewerApp extends Application {
             view.setMaterial(new PhongMaterial(Color.rgb(210, 218, 232)));
             view.setCullFace(CullFace.BACK);
             view.setDrawMode(DrawMode.FILL);
+            applyFraming(mesh, view);
 
             world.getChildren().setAll(view);
             status.setText(file.getName() + " | vertices=" + mesh.vertexCount() +
@@ -141,5 +144,31 @@ public final class MeshViewerApp extends Application {
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    private void applyFraming(org.meshforge.core.mesh.MeshData mesh, MeshView view) {
+        var bounds = mesh.boundsOrNull();
+        if (bounds == null || bounds.sphere() == null) {
+            return;
+        }
+
+        float cx = bounds.sphere().centerX();
+        float cy = bounds.sphere().centerY();
+        float cz = bounds.sphere().centerZ();
+        float radius = Math.max(bounds.sphere().radius(), 1.0e-6f);
+
+        double scale = TARGET_RADIUS / radius;
+        view.setScaleX(scale);
+        view.setScaleY(scale);
+        view.setScaleZ(scale);
+        view.setTranslateX(-cx * scale);
+        view.setTranslateY(-cy * scale);
+        view.setTranslateZ(-cz * scale);
+
+        if (camera != null) {
+            camera.setTranslateZ(-8.0);
+            camera.setNearClip(0.01);
+            camera.setFarClip(100_000.0);
+        }
     }
 }
