@@ -126,6 +126,12 @@ The canonical architecture reference is:
 docs/meshforge-architecture.md
 ```
 
+Future feature planning is tracked in:
+
+```
+docs/roadmap.md
+```
+
 ---
 
 # Quick Start
@@ -230,9 +236,11 @@ Typical integration:
 From repository root:
 
 ```
-mvn clean test        # compile and run tests
-mvn clean package     # build JAR in target/
-mvn -Pbench exec:exec # run JMH benchmarks
+mvn clean test                          # build and test all modules
+mvn -pl meshforge clean test            # build/test core mesh module only
+mvn -pl meshforge-loader clean test     # build/test loader module
+mvn -pl meshforge-demo package          # build demo module
+mvn -pl meshforge -Pbench exec:exec     # run JMH benchmarks for meshforge module
 ```
 
 ---
@@ -252,4 +260,3 @@ If you'd like next, I can:
 
 * Create a matching **API Guide for MeshForge** in the same style as Vectrix (module-by-module with usage snippets), or
 * Help you design the first concrete `MeshData` + `VertexSchema` implementation skeleton so you can start coding immediately.
-
