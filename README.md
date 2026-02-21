@@ -132,6 +132,12 @@ Future feature planning is tracked in:
 docs/roadmap.md
 ```
 
+Loader format rollout planning is tracked in:
+
+```
+docs/loader-roadmap.md
+```
+
 ---
 
 # Quick Start
