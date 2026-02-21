@@ -69,6 +69,9 @@
     <profiles>
         <profile>
             <id>bench</id>
+            <properties>
+                <jmh.filter>.*</jmh.filter>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
@@ -76,13 +79,12 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.1.0</version>
                         <configuration>
-                            <executable>java</executable>
+                            <mainClass>org.openjdk.jmh.Main</mainClass>
                             <classpathScope>test</classpathScope>
                             <arguments>
-                                <argument>--enable-preview</argument>
-                                <argument>-classpath</argument>
-                                <classpath/>
-                                <argument>org.openjdk.jmh.Main</argument>
+                                <argument>${jmh.filter}</argument>
+                                <argument>-f</argument>
+                                <argument>0</argument>
                             </arguments>
                         </configuration>
                     </plugin>

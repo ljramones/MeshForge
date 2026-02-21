@@ -102,3 +102,22 @@ Assuming float32 authoring attributes:
 - advanced memory pooling
 - default multithreaded packing
 - strip-focused primitive workflows
+
+## Microbenchmarks (JMH)
+
+Run meshforge microbenchmarks:
+
+```bash
+mvn -pl meshforge -Pbench test-compile exec:java
+```
+
+Run a subset (example: packer benchmarks only):
+
+```bash
+mvn -pl meshforge -Pbench test-compile exec:java -Djmh.filter='.*MeshPackerBenchmark.*'
+```
+
+Current benchmark classes:
+- `org.meshforge.bench.OptimizeVertexCacheBenchmark`
+- `org.meshforge.bench.MeshPackerBenchmark`
+- `org.meshforge.bench.MeshPipelineBenchmark`
