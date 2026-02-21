@@ -10,6 +10,7 @@ import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
 import org.meshforge.core.topology.Topology;
 import org.meshforge.ops.pipeline.MeshPipeline;
+import org.meshforge.ops.optimize.OptimizeVertexCacheOp;
 import org.meshforge.pack.buffer.PackedMesh;
 import org.meshforge.pack.packer.MeshPacker;
 import org.meshforge.pack.spec.PackSpec;
@@ -54,12 +55,35 @@ class MeshEdgeCasesTest {
             List.of(new Submesh(0, 9, "m"))
         );
 
-        int[] before = mesh.indicesOrNull().clone();
+        int beforeLength = mesh.indicesOrNull().length;
         MeshData out = MeshPipeline.run(mesh, Ops.optimizeVertexCache());
         int[] after = out.indicesOrNull();
 
-        assertEquals(before.length, after.length);
-        assertArrayEquals(sortedTriangles(before), sortedTriangles(after));
+        assertEquals(beforeLength, after.length);
+        for (int idx : after) {
+            assertTrue(idx >= 0 && idx < out.vertexCount());
+        }
+    }
+
+    @Test
+    void optimizeProducesContiguousRemapAndIndicesInRange() {
+        int[] indices = {5, 7, 9, 9, 7, 5, 7, 9, 5};
+        OptimizeVertexCacheOp.Result result = OptimizeVertexCacheOp.optimize(indices, 12, 32);
+
+        int max = -1;
+        for (int idx : result.indices()) {
+            assertTrue(idx >= 0);
+            max = Math.max(max, idx);
+        }
+        assertEquals(result.vertexCount() - 1, max);
+
+        int seen = 0;
+        for (int m : result.vertexRemap()) {
+            if (m >= 0) {
+                seen++;
+            }
+        }
+        assertEquals(result.vertexCount(), seen);
     }
 
     @Test

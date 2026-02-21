@@ -9,6 +9,7 @@ import org.meshforge.core.attr.VertexSchema;
 import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
 import org.meshforge.core.topology.Topology;
+import org.meshforge.ops.optimize.CacheMetrics;
 import org.meshforge.ops.pipeline.MeshPipeline;
 import org.meshforge.pack.buffer.PackedMesh;
 import org.meshforge.pack.layout.VertexLayout;
@@ -31,11 +32,14 @@ class MeshPerformanceAndIntegrationTest {
         shuffleTriangles(shuffled, 123456789L);
         mesh.setIndices(shuffled);
 
-        double before = acmr(shuffled, 32);
+        double before = CacheMetrics.acmr(shuffled, 32);
+        double atvrBefore = CacheMetrics.atvr(shuffled, mesh.vertexCount(), 32);
         MeshData optimized = MeshPipeline.run(mesh, Ops.optimizeVertexCache());
-        double after = acmr(optimized.indicesOrNull(), 32);
+        double after = CacheMetrics.acmr(optimized.indicesOrNull(), 32);
+        double atvrAfter = CacheMetrics.atvr(optimized.indicesOrNull(), optimized.vertexCount(), 32);
 
         assertTrue(after < before, "Expected ACMR to decrease after optimization");
+        assertTrue(atvrAfter < atvrBefore, "Expected ATVR to decrease after optimization");
     }
 
     @Test
@@ -234,35 +238,4 @@ class MeshPerformanceAndIntegrationTest {
         }
     }
 
-    private static double acmr(int[] indices, int cacheSize) {
-        int[] lru = new int[cacheSize];
-        for (int i = 0; i < cacheSize; i++) {
-            lru[i] = -1;
-        }
-
-        int misses = 0;
-        for (int index : indices) {
-            int pos = -1;
-            for (int i = 0; i < cacheSize; i++) {
-                if (lru[i] == index) {
-                    pos = i;
-                    break;
-                }
-            }
-            if (pos >= 0) {
-                if (pos > 0) {
-                    int hit = lru[pos];
-                    System.arraycopy(lru, 0, lru, 1, pos);
-                    lru[0] = hit;
-                }
-            } else {
-                misses++;
-                System.arraycopy(lru, 0, lru, 1, cacheSize - 1);
-                lru[0] = index;
-            }
-        }
-
-        int triangles = indices.length / 3;
-        return triangles == 0 ? 0.0 : (double) misses / triangles;
-    }
 }

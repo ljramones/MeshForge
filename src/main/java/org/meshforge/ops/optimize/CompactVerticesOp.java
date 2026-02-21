@@ -47,17 +47,7 @@ public final class CompactVerticesOp implements MeshOp {
             remappedIndices[i] = oldToNew[indices[i]];
         }
 
-        MeshData compacted = new MeshData(
-            mesh.topology(),
-            mesh.schema(),
-            newVertexCount,
-            remappedIndices,
-            mesh.submeshes()
-        );
-
-        copyAttributes(mesh, compacted, oldToNew, newVertexCount);
-        compacted.setBounds(mesh.boundsOrNull());
-        return compacted;
+        return reorderAndCompact(mesh, remappedIndices, oldToNew, newVertexCount);
     }
 
     public static MeshData remap(MeshData mesh, int[] remappedIndices) {
@@ -81,6 +71,25 @@ public final class CompactVerticesOp implements MeshOp {
         copyAttributes(mesh, remapped, identity, mesh.vertexCount());
         remapped.setBounds(mesh.boundsOrNull());
         return remapped;
+    }
+
+    public static MeshData reorderAndCompact(
+        MeshData mesh,
+        int[] remappedIndices,
+        int[] oldToNew,
+        int newVertexCount
+    ) {
+        MeshData compacted = new MeshData(
+            mesh.topology(),
+            mesh.schema(),
+            newVertexCount,
+            remappedIndices,
+            mesh.submeshes()
+        );
+
+        copyAttributes(mesh, compacted, oldToNew, newVertexCount);
+        compacted.setBounds(mesh.boundsOrNull());
+        return compacted;
     }
 
     private static void copyAttributes(MeshData source, MeshData target, int[] oldToNew, int targetVertexCount) {
