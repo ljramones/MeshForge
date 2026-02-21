@@ -101,6 +101,7 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         int[] output = new int[indices.length];
         int[] lru = new int[cacheSize];
         Arrays.fill(lru, -1);
+        int cacheCount = 0;
 
         int nextSeed = 0;
         int outTri = 0;
@@ -148,17 +149,9 @@ public final class OptimizeVertexCacheOp implements MeshOp {
             output[outTri * 3 + 2] = c;
             outTri++;
 
-            touch(lru, a);
-            touch(lru, b);
-            touch(lru, c);
-
-            Arrays.fill(cachePos, -1);
-            for (int i = 0; i < cacheSize; i++) {
-                int v = lru[i];
-                if (v >= 0) {
-                    cachePos[v] = i;
-                }
-            }
+            cacheCount = touch(lru, cachePos, cacheCount, a);
+            cacheCount = touch(lru, cachePos, cacheCount, b);
+            cacheCount = touch(lru, cachePos, cacheCount, c);
 
             liveTriCount[a]--;
             liveTriCount[b]--;
@@ -226,25 +219,39 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         candidateList[slot] = last;
     }
 
-    private static void touch(int[] lru, int vertex) {
-        int index = -1;
-        for (int i = 0; i < lru.length; i++) {
-            if (lru[i] == vertex) {
-                index = i;
-                break;
-            }
-        }
+    private static int touch(int[] lru, int[] cachePos, int cacheCount, int vertex) {
+        int index = cachePos[vertex];
         if (index == 0) {
-            return;
+            return cacheCount;
         }
         if (index > 0) {
-            int value = lru[index];
-            System.arraycopy(lru, 0, lru, 1, index);
-            lru[0] = value;
-        } else {
-            System.arraycopy(lru, 0, lru, 1, lru.length - 1);
+            for (int i = index; i > 0; i--) {
+                int moved = lru[i - 1];
+                lru[i] = moved;
+                cachePos[moved] = i;
+            }
             lru[0] = vertex;
+            cachePos[vertex] = 0;
+        } else {
+            int shift = Math.min(cacheCount, lru.length - 1);
+            if (cacheCount == lru.length) {
+                int evicted = lru[lru.length - 1];
+                if (evicted >= 0) {
+                    cachePos[evicted] = -1;
+                }
+            }
+            for (int i = shift; i > 0; i--) {
+                int moved = lru[i - 1];
+                lru[i] = moved;
+                cachePos[moved] = i;
+            }
+            lru[0] = vertex;
+            cachePos[vertex] = 0;
+            if (cacheCount < lru.length) {
+                cacheCount++;
+            }
         }
+        return cacheCount;
     }
 
     private static float scoreVertex(int cachePos, int liveTris, int cacheSize) {
