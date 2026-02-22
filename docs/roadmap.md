@@ -26,8 +26,8 @@ This roadmap tracks planned features after the current v1 foundation.
 - Add stronger policy controls for auto-generated vs fail-fast pack requirements.
 
 ## v1.2 (workflow and interoperability)
-- Add `io.gltf.read` basic reader (positions/indices, then normals/uvs/material groups).
-- Add `io.gltf.write` basic exporter for packed and authoring meshes.
+- Add `loader.gltf.read` basic reader in `meshforge-loader` (positions/indices, then normals/uvs/material groups).
+- Add `loader.gltf.write` basic exporter support in `meshforge-loader`.
 - Add bridge examples for renderer upload descriptors from `VertexLayout`.
 - Add migration helpers for external mesh sources (OBJ, tool exports).
 

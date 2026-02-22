@@ -174,7 +174,8 @@ org.meshforge.api
 org.meshforge.core.*
 org.meshforge.ops.*
 org.meshforge.pack.*
-org.meshforge.io.gltf.*
+org.meshforge.loader.*            (in meshforge-loader module)
+org.meshforge.loader.gltf.*       (in meshforge-loader module)
 ```
 
 Guidelines:
@@ -182,7 +183,7 @@ Guidelines:
 * `core` contains authoring types only.
 * `ops` contains processing pipeline.
 * `pack` contains runtime packing and buffer logic.
-* `io` modules convert external formats → `MeshData`.
+* Loader modules convert external formats → `MeshData` and live in `meshforge-loader`.
 
 Render backends should live outside MeshForge.
 
@@ -474,4 +475,4 @@ For very small fixtures, millisecond rounding can show `0 ms`; use larger iterat
 * Interleaved packing
 * Basic compression policies
 * Immutable runtime mesh
-* glTF IO module (initial support)
+* Multi-module structure (`meshforge`, `meshforge-loader`, `meshforge-demo`)
