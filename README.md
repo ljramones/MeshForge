@@ -248,7 +248,7 @@ mvn -pl meshforge -Pbench test-compile exec:java   # run JMH benchmarks for mesh
 
 # Demos
 
-The `meshforge-demo` module currently provides two runnable demos:
+The `meshforge-demo` module currently provides runnable demos:
 
 Prerequisite (fresh checkout or after API changes):
 
@@ -274,6 +274,28 @@ mvn -pl meshforge-demo -Dexec.mainClass=org.meshforge.demo.MeshForgeDemo -Dexec.
 
 ```bash
 mvn -pl meshforge-demo javafx:run
+```
+
+3. `org.meshforge.demo.MeshletDispatchDemo` (headless Vulkan mesh-shader readiness)
+- Runs Vulkan preflight, loads a mesh, builds meshlets, and validates headless queue submission with `VK_EXT_mesh_shader`.
+- On macOS, requires Vulkan loader (MoltenVK) available to LWJGL.
+- Preflight only:
+
+```bash
+mvn -q -pl meshforge-demo -Dexec.mainClass=org.meshforge.demo.VulkanPreflight exec:java
+```
+
+- Dispatch demo:
+
+```bash
+mvn -q -pl meshforge-demo -Dexec.mainClass=org.meshforge.demo.MeshletDispatchDemo -Dexec.args="fixtures/obj/medium/suzanne.obj" exec:java
+```
+
+- macOS setup hint (adjust `<ver>`):
+
+```bash
+export VK_ICD_FILENAMES="$HOME/VulkanSDK/<ver>/macOS/share/vulkan/icd.d/MoltenVK_icd.json"
+export DYLD_LIBRARY_PATH="$HOME/VulkanSDK/<ver>/macOS/lib:$DYLD_LIBRARY_PATH"
 ```
 
 See `docs/mesh-fixtures.md` for sample asset sources and local fixture setup.

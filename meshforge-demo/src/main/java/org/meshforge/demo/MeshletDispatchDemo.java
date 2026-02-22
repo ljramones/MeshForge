@@ -53,6 +53,11 @@ public final class MeshletDispatchDemo {
             return;
         }
 
+        if (!VulkanPreflight.checkVulkanLoader()) {
+            VulkanPreflight.printMacOsSetupHint();
+            return;
+        }
+
         PackedMesh packed = loadPacked(Path.of(args[0]));
         if (!packed.hasMeshlets()) {
             System.out.println("Mesh has no meshlets; pack with realtimeWithMeshlets first.");
