@@ -141,7 +141,7 @@ v1 baseline:
 - `MeshData`: GC-managed arrays/collections
 - `PackedMesh`: direct `ByteBuffer` by default
 
-Optional future path in `pack.memory`: segment/arena-backed allocations with explicit ownership; if exposed, define lifetime via `AutoCloseable`.
+Future memory backend extensions (segment/arena-backed ownership) can be added when needed and should define lifetime via `AutoCloseable`.
 
 ## Renderer Integration
 

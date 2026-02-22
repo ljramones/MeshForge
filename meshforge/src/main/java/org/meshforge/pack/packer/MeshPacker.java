@@ -11,6 +11,7 @@ import org.meshforge.pack.buffer.MeshletBufferView;
 import org.meshforge.pack.buffer.MeshletBuffers;
 import org.meshforge.pack.buffer.PackedMesh;
 import org.meshforge.pack.layout.VertexLayout;
+import org.meshforge.pack.simd.SimdNormalPacker;
 import org.meshforge.pack.spec.PackSpec;
 import org.vectrix.gpu.Half;
 import org.vectrix.gpu.OctaNormal;
@@ -149,12 +150,21 @@ public final class MeshPacker {
 
         // Hot path for common unskinned meshes: position + normal only.
         if (!profileEnabled && hasNormal && !hasTangent && !hasUv && !hasColor && !hasJoints && !hasWeights) {
+            int[] octaPackedNormals = null;
+            boolean useSimdOcta = normalFormat == VertexFormat.OCTA_SNORM16x2 && SimdNormalPacker.isEnabled();
+            if (useSimdOcta) {
+                octaPackedNormals = new int[vertexCount];
+                SimdNormalPacker.packOctaNormals(normalData, vertexCount, octaPackedNormals);
+            }
             if (hotPosNormalLayout) {
-                for (int p = 0; p < vertexCount * 3; p += 3) {
+                for (int i = 0, p = 0; i < vertexCount; i++, p += 3) {
                     vertexBuffer.putFloat(positionData[p]);
                     vertexBuffer.putFloat(positionData[p + 1]);
                     vertexBuffer.putFloat(positionData[p + 2]);
-                    vertexBuffer.putInt(packNormalToInt(normalFormat, normalData[p], normalData[p + 1], normalData[p + 2]));
+                    int packedNormal = useSimdOcta
+                        ? octaPackedNormals[i]
+                        : packNormalToInt(normalFormat, normalData[p], normalData[p + 1], normalData[p + 2]);
+                    vertexBuffer.putInt(packedNormal);
                 }
             } else {
                 for (int i = 0; i < vertexCount; i++) {
@@ -163,7 +173,11 @@ public final class MeshPacker {
                     vertexBuffer.putFloat(base + posOff, positionData[p]);
                     vertexBuffer.putFloat(base + posOff + 4, positionData[p + 1]);
                     vertexBuffer.putFloat(base + posOff + 8, positionData[p + 2]);
-                    writeNormal(vertexBuffer, base + normalOff, normalFormat, normalData[p], normalData[p + 1], normalData[p + 2]);
+                    if (useSimdOcta) {
+                        vertexBuffer.putInt(base + normalOff, octaPackedNormals[i]);
+                    } else {
+                        writeNormal(vertexBuffer, base + normalOff, normalFormat, normalData[p], normalData[p + 1], normalData[p + 2]);
+                    }
                 }
             }
         } else if (!profileEnabled && !hasNormal && !hasTangent && !hasUv && !hasColor && !hasJoints && !hasWeights) {

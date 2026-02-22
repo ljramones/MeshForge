@@ -286,7 +286,8 @@ Typical integration:
 # Development Notes
 
 * Java preview features are enabled (`--enable-preview`).
-* SIMD or Vector API usage (if any) is confined to `pack` internals.
+* Vector API SIMD usage is confined to `pack` internals (currently octa-normal hot path).
+* SIMD pack path can be toggled with `-Dmeshforge.pack.simd.enabled=true|false` (default `true`).
 * Prefer API entry points (`Meshes`, `Ops`, `Packers`) for user workflows.
 * `MeshData` is mutable.
 * `PackedMesh` is immutable and safe to pass to downstream systems.
