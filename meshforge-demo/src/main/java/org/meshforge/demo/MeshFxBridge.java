@@ -13,6 +13,7 @@ import java.util.List;
 
 final class MeshFxBridge {
     private static final int MAX_POINTS_PER_MESH = 30_000;
+    private static final int MAX_TRIANGLES_PER_MESH = 20_000;
 
     private MeshFxBridge() {
     }
@@ -78,12 +79,16 @@ final class MeshFxBridge {
         private int[] faces = new int[6 * 1024];
         private int pointFloats;
         private int faceInts;
+        private int triangleCount;
 
         ChunkBuilder(float[] sourcePositions) {
             this.sourcePositions = sourcePositions;
         }
 
         boolean canAccept(int a, int b, int c) {
+            if (triangleCount >= MAX_TRIANGLES_PER_MESH) {
+                return false;
+            }
             int needed = 0;
             if (!remap.containsKey(a)) {
                 needed++;
@@ -109,6 +114,7 @@ final class MeshFxBridge {
             faces[faceInts++] = 0;
             faces[faceInts++] = rc;
             faces[faceInts++] = 0;
+            triangleCount++;
         }
 
         boolean hasFaces() {
