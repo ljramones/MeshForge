@@ -22,6 +22,7 @@ public final class MeshForgeDemo {
         var mesh = MeshLoaders.defaults().load(Path.of(args[0]));
         mesh = Pipelines.realtimeFast(mesh);
         mesh = MeshPipeline.run(mesh, Ops.clusterizeMeshlets(128, 64));
+        mesh = MeshPipeline.run(mesh, Ops.optimizeMeshletOrder(128, 64));
 
         var packed = MeshPacker.pack(mesh, Packers.realtimeWithMeshlets());
         System.out.println("Vertices: " + mesh.vertexCount());

@@ -117,6 +117,64 @@ public final class MeshletClusters {
         return out;
     }
 
+    public static int[] reorderIndicesByMeshletMorton(MeshData mesh, int[] indices, int maxVerts, int maxTris) {
+        if (indices == null || indices.length == 0) {
+            return indices == null ? null : new int[0];
+        }
+        if ((indices.length % 3) != 0) {
+            throw new IllegalStateException("Triangle index buffer length must be divisible by 3");
+        }
+
+        List<Meshlet> meshlets = buildMeshlets(mesh, indices, maxVerts, maxTris);
+        if (meshlets.size() <= 1) {
+            return indices.clone();
+        }
+
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+        for (Meshlet m : meshlets) {
+            Aabbf b = m.bounds();
+            if (b.minX() < minX) minX = b.minX();
+            if (b.minY() < minY) minY = b.minY();
+            if (b.minZ() < minZ) minZ = b.minZ();
+            if (b.maxX() > maxX) maxX = b.maxX();
+            if (b.maxY() > maxY) maxY = b.maxY();
+            if (b.maxZ() > maxZ) maxZ = b.maxZ();
+        }
+
+        List<ScoredMeshlet> scored = new ArrayList<>(meshlets.size());
+        for (Meshlet m : meshlets) {
+            Aabbf b = m.bounds();
+            float cx = (b.minX() + b.maxX()) * 0.5f;
+            float cy = (b.minY() + b.maxY()) * 0.5f;
+            float cz = (b.minZ() + b.maxZ()) * 0.5f;
+            int qx = quantize21(cx, minX, maxX);
+            int qy = quantize21(cy, minY, maxY);
+            int qz = quantize21(cz, minZ, maxZ);
+            long morton = morton3d21(qx, qy, qz);
+            scored.add(new ScoredMeshlet(m, morton));
+        }
+        scored.sort((a, b) -> {
+            int c = Long.compareUnsigned(a.morton, b.morton);
+            if (c != 0) return c;
+            return Integer.compare(a.meshlet.firstTriangle(), b.meshlet.firstTriangle());
+        });
+
+        int[] out = new int[indices.length];
+        int outPos = 0;
+        for (ScoredMeshlet s : scored) {
+            int first = s.meshlet.firstIndex();
+            int count = s.meshlet.indexCount();
+            System.arraycopy(indices, first, out, outPos, count);
+            outPos += count;
+        }
+        return out;
+    }
+
     private static Meshlet buildMeshletFromCluster(
         int firstTri,
         int[] clusterTriStarts,
@@ -287,5 +345,63 @@ public final class MeshletClusters {
         }
         localVerts[localVertCount] = value;
         return localVertCount + 1;
+    }
+
+    private static int quantize21(float value, float min, float max) {
+        if (max <= min) {
+            return 0;
+        }
+        float t = (value - min) / (max - min);
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        return Math.min(0x1FFFFF, Math.max(0, Math.round(t * 0x1FFFFF)));
+    }
+
+    private static long morton3d21(int x, int y, int z) {
+        long xx = splitBy2(x);
+        long yy = splitBy2(y) << 1;
+        long zz = splitBy2(z) << 2;
+        return xx | yy | zz;
+    }
+
+    private static long splitBy2(int v) {
+        long x = v & 0x1FFFFF;
+        x = (x | (x << 32)) & 0x1F00000000FFFFL;
+        x = (x | (x << 16)) & 0x1F0000FF0000FFL;
+        x = (x | (x << 8)) & 0x100F00F00F00F00FL;
+        x = (x | (x << 4)) & 0x10C30C30C30C30C3L;
+        x = (x | (x << 2)) & 0x1249249249249249L;
+        return x;
+    }
+
+    public static double averageMeshletCenterStep(List<Meshlet> meshlets) {
+        if (meshlets == null || meshlets.size() < 2) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        int steps = 0;
+        float px = 0.0f, py = 0.0f, pz = 0.0f;
+        boolean hasPrev = false;
+        for (Meshlet m : meshlets) {
+            Aabbf b = m.bounds();
+            float cx = (b.minX() + b.maxX()) * 0.5f;
+            float cy = (b.minY() + b.maxY()) * 0.5f;
+            float cz = (b.minZ() + b.maxZ()) * 0.5f;
+            if (hasPrev) {
+                double dx = cx - px;
+                double dy = cy - py;
+                double dz = cz - pz;
+                sum += Math.sqrt(dx * dx + dy * dy + dz * dz);
+                steps++;
+            }
+            px = cx;
+            py = cy;
+            pz = cz;
+            hasPrev = true;
+        }
+        return steps == 0 ? 0.0 : (sum / steps);
+    }
+
+    private record ScoredMeshlet(Meshlet meshlet, long morton) {
     }
 }

@@ -11,6 +11,7 @@ import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
 import org.meshforge.core.topology.Topology;
 import org.meshforge.ops.pipeline.MeshPipeline;
+import org.meshforge.ops.optimize.MeshletClusters;
 
 import java.util.List;
 
@@ -271,6 +272,59 @@ class MeshPipelineOpsTest {
         assertNotNull(outB.indicesOrNull());
         assertEquals(12, outA.indicesOrNull().length);
         assertArrayEquals(outA.indicesOrNull(), outB.indicesOrNull());
+    }
+
+    @Test
+    void optimizeMeshletOrderIsDeterministicAndImprovesLocality() {
+        MeshData a = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            12,
+            new int[] {
+                0, 1, 2,   // cluster A
+                6, 7, 8,   // cluster C
+                3, 4, 5,   // cluster B
+                9, 10, 11  // cluster D
+            },
+            List.of(new Submesh(0, 12, "m"))
+        );
+        MeshData b = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            12,
+            new int[] {
+                0, 1, 2,
+                6, 7, 8,
+                3, 4, 5,
+                9, 10, 11
+            },
+            List.of(new Submesh(0, 12, "m"))
+        );
+        // Four spatial clusters in intentionally scrambled triangle order.
+        setPositions(a, new float[] {
+            0, 0, 0,   0.5f, 0, 0,   0, 0.5f, 0,   // A
+            10, 0, 0,  10.5f, 0, 0, 10, 0.5f, 0,   // B
+            0, 10, 0,  0.5f, 10, 0, 0, 10.5f, 0,   // C
+            10, 10, 0, 10.5f, 10, 0, 10, 10.5f, 0  // D
+        });
+        setPositions(b, new float[] {
+            0, 0, 0,   0.5f, 0, 0,   0, 0.5f, 0,
+            10, 0, 0,  10.5f, 0, 0, 10, 0.5f, 0,
+            0, 10, 0,  0.5f, 10, 0, 0, 10.5f, 0,
+            10, 10, 0, 10.5f, 10, 0, 10, 10.5f, 0
+        });
+
+        double before = MeshletClusters.averageMeshletCenterStep(
+            MeshletClusters.buildMeshlets(a, a.indicesOrNull(), 3, 1)
+        );
+        MeshData outA = MeshPipeline.run(a, Ops.optimizeMeshletOrder(3, 1));
+        MeshData outB = MeshPipeline.run(b, Ops.optimizeMeshletOrder(3, 1));
+        double after = MeshletClusters.averageMeshletCenterStep(
+            MeshletClusters.buildMeshlets(outA, outA.indicesOrNull(), 3, 1)
+        );
+
+        assertArrayEquals(outA.indicesOrNull(), outB.indicesOrNull());
+        assertTrue(after <= before, "expected optimized meshlet order to not worsen locality");
     }
 
     private static VertexSchema positionSchema() {

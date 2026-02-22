@@ -2,6 +2,7 @@ package org.meshforge.api;
 
 import org.meshforge.ops.optimize.OptimizeVertexCacheOp;
 import org.meshforge.ops.optimize.ClusterizeMeshletsOp;
+import org.meshforge.ops.optimize.OptimizeMeshletOrderOp;
 import org.meshforge.ops.generate.ComputeBoundsOp;
 import org.meshforge.ops.generate.RecalculateNormalsOp;
 import org.meshforge.ops.generate.RecalculateTangentsOp;
@@ -26,6 +27,10 @@ public final class Ops {
 
     public static MeshOp clusterizeMeshlets(int maxVertices, int maxTriangles) {
         return new ClusterizeMeshletsOp(maxVertices, maxTriangles);
+    }
+
+    public static MeshOp optimizeMeshletOrder(int maxVertices, int maxTriangles) {
+        return new OptimizeMeshletOrderOp(maxVertices, maxTriangles);
     }
 
     public static MeshOp bounds() {
