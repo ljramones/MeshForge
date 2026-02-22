@@ -18,6 +18,7 @@ import org.meshforge.pack.spec.PackSpec;
 import org.vectrix.gpu.Half;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.List;
 import java.util.Random;
 
@@ -40,6 +41,17 @@ class MeshPerformanceAndIntegrationTest {
 
         assertTrue(after < before, "Expected ACMR to decrease after optimization");
         assertTrue(atvrAfter < atvrBefore, "Expected ATVR to decrease after optimization");
+    }
+
+    @Test
+    void optimizeVertexCacheCompletesWithinGuardrailBudget() {
+        MeshData mesh = createPositionGrid(128, 128);
+        int[] shuffled = mesh.indicesOrNull().clone();
+        shuffleTriangles(shuffled, 987654321L);
+        mesh.setIndices(shuffled);
+
+        // Non-strict guardrail to catch severe regressions, not microbenchmark precision.
+        assertTimeoutPreemptively(Duration.ofSeconds(3), () -> MeshPipeline.run(mesh, Ops.optimizeVertexCache()));
     }
 
     @Test

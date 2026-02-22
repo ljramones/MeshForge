@@ -26,3 +26,5 @@ replay_pid*
 
 # Optional local tooling caches
 /.mvn/timing.properties
+/org.meshforge.bench.OptimizeVertexCacheBenchmark.optimizeAndMeasureAcmr-AverageTime/profile.jfr
+*.jfr

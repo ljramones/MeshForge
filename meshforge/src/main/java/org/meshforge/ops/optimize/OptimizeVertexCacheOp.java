@@ -55,12 +55,16 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         }
 
         int[] liveTriCount = new int[vertexCount];
+        int maxLiveTriCount = 0;
         for (int i = 0; i < indices.length; i++) {
             int idx = indices[i];
             if (idx < 0 || idx >= vertexCount) {
                 throw new IllegalArgumentException("Index out of range at " + i + ": " + idx);
             }
             liveTriCount[idx]++;
+            if (liveTriCount[idx] > maxLiveTriCount) {
+                maxLiveTriCount = liveTriCount[idx];
+            }
         }
 
         int[][] adjacency = new int[vertexCount][];
@@ -78,16 +82,21 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         }
 
         boolean[] emitted = new boolean[triCount];
-        boolean[] candidate = new boolean[triCount];
-        int[] candidateList = new int[triCount];
-        int candidateCount = 0;
+        int[] triVersion = new int[triCount];
+        int[] triSeenStamp = new int[triCount];
+        int seenStamp = 1;
+
+        IntFloatMaxHeap heap = new IntFloatMaxHeap(Math.max(16, triCount));
+        final float scoreEpsilon = 1.0e-6f;
 
         int[] cachePos = new int[vertexCount];
         Arrays.fill(cachePos, -1);
+        float[] cacheScore = buildCacheScore(cacheSize);
+        float[] valenceScore = buildValenceScore(maxLiveTriCount);
 
         float[] vertexScore = new float[vertexCount];
         for (int v = 0; v < vertexCount; v++) {
-            vertexScore[v] = scoreVertex(cachePos[v], liveTriCount[v], cacheSize);
+            vertexScore[v] = scoreVertexLookup(cachePos[v], liveTriCount[v], cacheScore, valenceScore);
         }
 
         float[] triangleScore = new float[triCount];
@@ -107,38 +116,26 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         int outTri = 0;
 
         while (outTri < triCount) {
-            if (candidateCount == 0) {
-                nextSeed = nextUnemitted(emitted, nextSeed);
-                if (nextSeed >= triCount) {
-                    break;
-                }
-                candidateCount = addCandidate(nextSeed, emitted, candidate, candidateList, candidateCount);
-            }
-
-            int bestSlot = -1;
             int bestTri = -1;
-            float bestScore = -1.0f;
-            for (int i = 0; i < candidateCount; i++) {
-                int t = candidateList[i];
-                if (emitted[t]) {
-                    continue;
-                }
-                float score = triangleScore[t];
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestTri = t;
-                    bestSlot = i;
+            while (!heap.isEmpty()) {
+                int tri = heap.peekTri();
+                int version = heap.peekVersion();
+                heap.pop();
+                if (!emitted[tri] && version == triVersion[tri]) {
+                    bestTri = tri;
+                    break;
                 }
             }
 
             if (bestTri < 0) {
-                candidateCount = 0;
-                continue;
+                nextSeed = nextUnemitted(emitted, nextSeed);
+                if (nextSeed >= triCount) {
+                    break;
+                }
+                bestTri = nextSeed;
             }
 
             emitted[bestTri] = true;
-            removeCandidate(bestSlot, bestTri, candidate, candidateList, candidateCount);
-            candidateCount--;
 
             int a = indices[bestTri * 3];
             int b = indices[bestTri * 3 + 1];
@@ -157,18 +154,30 @@ public final class OptimizeVertexCacheOp implements MeshOp {
             liveTriCount[b]--;
             liveTriCount[c]--;
 
-            for (int i = 0; i < cacheSize; i++) {
+            if (seenStamp == Integer.MAX_VALUE) {
+                Arrays.fill(triSeenStamp, 0);
+                seenStamp = 1;
+            } else {
+                seenStamp++;
+            }
+
+            for (int i = 0; i < cacheCount; i++) {
                 int v = lru[i];
-                if (v >= 0) {
-                    vertexScore[v] = scoreVertex(cachePos[v], liveTriCount[v], cacheSize);
-                    for (int t : adjacency[v]) {
-                        if (!emitted[t]) {
-                            int i0 = indices[t * 3];
-                            int i1 = indices[t * 3 + 1];
-                            int i2 = indices[t * 3 + 2];
-                            triangleScore[t] = vertexScore[i0] + vertexScore[i1] + vertexScore[i2];
-                            candidateCount = addCandidate(t, emitted, candidate, candidateList, candidateCount);
-                        }
+                vertexScore[v] = scoreVertexLookup(cachePos[v], liveTriCount[v], cacheScore, valenceScore);
+                for (int t : adjacency[v]) {
+                    if (emitted[t] || triSeenStamp[t] == seenStamp) {
+                        continue;
+                    }
+                    triSeenStamp[t] = seenStamp;
+                    int i0 = indices[t * 3];
+                    int i1 = indices[t * 3 + 1];
+                    int i2 = indices[t * 3 + 2];
+                    float updated = vertexScore[i0] + vertexScore[i1] + vertexScore[i2];
+                    float previous = triangleScore[t];
+                    triangleScore[t] = updated;
+                    if (Math.abs(updated - previous) > scoreEpsilon) {
+                        int version = ++triVersion[t];
+                        heap.push(t, updated, version);
                     }
                 }
             }
@@ -197,26 +206,6 @@ public final class OptimizeVertexCacheOp implements MeshOp {
             i++;
         }
         return i;
-    }
-
-    private static int addCandidate(
-        int tri,
-        boolean[] emitted,
-        boolean[] candidate,
-        int[] candidateList,
-        int count
-    ) {
-        if (!emitted[tri] && !candidate[tri]) {
-            candidate[tri] = true;
-            candidateList[count++] = tri;
-        }
-        return count;
-    }
-
-    private static void removeCandidate(int slot, int tri, boolean[] candidate, int[] candidateList, int count) {
-        candidate[tri] = false;
-        int last = candidateList[count - 1];
-        candidateList[slot] = last;
     }
 
     private static int touch(int[] lru, int[] cachePos, int cacheCount, int vertex) {
@@ -254,29 +243,127 @@ public final class OptimizeVertexCacheOp implements MeshOp {
         return cacheCount;
     }
 
-    private static float scoreVertex(int cachePos, int liveTris, int cacheSize) {
-        final float cacheDecayPower = 1.5f;
-        final float lastTriScore = 0.75f;
-        final float valenceBoostScale = 2.0f;
-        final float valenceBoostPower = 0.5f;
-
+    private static float scoreVertexLookup(int cachePos, int liveTris, float[] cacheScore, float[] valenceScore) {
         if (liveTris <= 0) {
             return -1.0f;
         }
+        float score = cachePos >= 0 ? cacheScore[cachePos] : 0.0f;
+        return score + valenceScore[liveTris];
+    }
 
-        float score = 0.0f;
-        if (cachePos < 0) {
-            // not in cache
-        } else if (cachePos < 3) {
-            score = lastTriScore;
-        } else {
-            float scaler = 1.0f / (cacheSize - 3);
-            float rank = 1.0f - (cachePos - 3) * scaler;
-            score = (float) Math.pow(rank, cacheDecayPower);
+    private static float[] buildCacheScore(int cacheSize) {
+        final float cacheDecayPower = 1.5f;
+        final float lastTriScore = 0.75f;
+        float[] cacheScore = new float[cacheSize];
+        for (int i = 0; i < cacheSize; i++) {
+            if (i < 3) {
+                cacheScore[i] = lastTriScore;
+            } else {
+                float scaler = 1.0f / (cacheSize - 3);
+                float rank = 1.0f - (i - 3) * scaler;
+                cacheScore[i] = (float) Math.pow(rank, cacheDecayPower);
+            }
+        }
+        return cacheScore;
+    }
+
+    private static float[] buildValenceScore(int maxLiveTris) {
+        final float valenceBoostScale = 2.0f;
+        final float valenceBoostPower = 0.5f;
+        float[] valenceScore = new float[Math.max(2, maxLiveTris + 1)];
+        for (int i = 1; i < valenceScore.length; i++) {
+            valenceScore[i] = valenceBoostScale * (float) Math.pow(i, -valenceBoostPower);
+        }
+        return valenceScore;
+    }
+
+    private static final class IntFloatMaxHeap {
+        private int[] tri;
+        private float[] score;
+        private int[] version;
+        private int size;
+
+        IntFloatMaxHeap(int initialCapacity) {
+            tri = new int[initialCapacity];
+            score = new float[initialCapacity];
+            version = new int[initialCapacity];
         }
 
-        float valenceBoost = valenceBoostScale * (float) Math.pow(liveTris, -valenceBoostPower);
-        return score + valenceBoost;
+        boolean isEmpty() {
+            return size == 0;
+        }
+
+        int peekTri() {
+            return tri[0];
+        }
+
+        int peekVersion() {
+            return version[0];
+        }
+
+        void push(int t, float s, int v) {
+            ensureCapacity(size + 1);
+            int i = size++;
+            while (i > 0) {
+                int p = (i - 1) >>> 1;
+                if (score[p] >= s) {
+                    break;
+                }
+                tri[i] = tri[p];
+                score[i] = score[p];
+                version[i] = version[p];
+                i = p;
+            }
+            tri[i] = t;
+            score[i] = s;
+            version[i] = v;
+        }
+
+        void pop() {
+            int last = --size;
+            if (last < 0) {
+                size = 0;
+                return;
+            }
+            if (last == 0) {
+                return;
+            }
+
+            int t = tri[last];
+            float s = score[last];
+            int v = version[last];
+
+            int i = 0;
+            int half = last >>> 1;
+            while (i < half) {
+                int left = (i << 1) + 1;
+                int right = left + 1;
+                int child = left;
+                if (right < last && score[right] > score[left]) {
+                    child = right;
+                }
+                if (score[child] <= s) {
+                    break;
+                }
+                tri[i] = tri[child];
+                score[i] = score[child];
+                version[i] = version[child];
+                i = child;
+            }
+            tri[i] = t;
+            score[i] = s;
+            version[i] = v;
+        }
+
+        private void ensureCapacity(int needed) {
+            if (needed <= tri.length) {
+                return;
+            }
+            int newCap = Math.max(needed, tri.length << 1);
+            tri = Arrays.copyOf(tri, newCap);
+            score = Arrays.copyOf(score, newCap);
+            version = Arrays.copyOf(version, newCap);
+        }
     }
 
     public record Result(int[] indices, int[] vertexRemap, int vertexCount) {

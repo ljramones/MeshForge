@@ -135,3 +135,13 @@ Size scaling matrix (`cells` = 64, 128, 256):
 ```bash
 mvn -pl meshforge -Pbench test-compile exec:java -Djmh.filter='.*MeshSizeScalingBenchmark.*'
 ```
+
+## Optimize Cache Timeline
+
+`OptimizeVertexCacheBenchmark.optimizeAndMeasureAcmr` trend on the same fixture:
+
+- initial baseline: ~850 ms/op
+- incremental cache-position update: ~400 ms/op
+- heap candidate selection + score lookup tables + push gating: ~294 ms/op
+
+Use this as a directional performance guardrail; exact values vary by machine/JVM.

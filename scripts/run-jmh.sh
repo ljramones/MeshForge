@@ -22,5 +22,5 @@ exec java --enable-preview -cp "$CP" org.openjdk.jmh.Main \
   "$FILTER" \
   -f "$FORKS" \
   -wi "$WARMUPS" \
-  -i "$MEASURE"
-
+  -i "$MEASURE" \
+  "$@"
