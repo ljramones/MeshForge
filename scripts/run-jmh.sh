@@ -9,6 +9,11 @@ FILTER="${JMH_FILTER:-.*}"
 FORKS="${JMH_FORKS:-1}"
 WARMUPS="${JMH_WARMUP_ITER:-3}"
 MEASURE="${JMH_MEASURE_ITER:-5}"
+JAVA_OPTS=()
+if [[ -n "${JMH_JAVA_OPTS:-}" ]]; then
+  # shellcheck disable=SC2206
+  JAVA_OPTS=( ${JMH_JAVA_OPTS} )
+fi
 
 cd "$ROOT_DIR"
 
@@ -18,7 +23,7 @@ mvn -q -pl meshforge -DskipTests test-compile dependency:build-classpath \
 
 CP="$(cat "$CP_FILE"):$MODULE_DIR/target/test-classes:$MODULE_DIR/target/classes"
 
-exec java --enable-preview -cp "$CP" org.openjdk.jmh.Main \
+exec java --enable-preview "${JAVA_OPTS[@]}" -cp "$CP" org.openjdk.jmh.Main \
   "$FILTER" \
   -f "$FORKS" \
   -wi "$WARMUPS" \

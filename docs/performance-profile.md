@@ -108,13 +108,13 @@ Assuming float32 authoring attributes:
 Run meshforge microbenchmarks:
 
 ```bash
-mvn -pl meshforge -Pbench test-compile exec:java
+./scripts/run-jmh.sh
 ```
 
 Run a subset (example: packer benchmarks only):
 
 ```bash
-mvn -pl meshforge -Pbench test-compile exec:java -Djmh.filter='.*MeshPackerBenchmark.*'
+JMH_FILTER='.*MeshPackerBenchmark.*' ./scripts/run-jmh.sh
 ```
 
 Current benchmark classes:
@@ -132,13 +132,13 @@ Demo fixture profilers:
 Per-op hotspot pass:
 
 ```bash
-mvn -pl meshforge -Pbench test-compile exec:java -Djmh.filter='.*MeshOpsBenchmark.*'
+JMH_FILTER='.*MeshOpsBenchmark.*' ./scripts/run-jmh.sh
 ```
 
 Size scaling matrix (`cells` = 64, 128, 256):
 
 ```bash
-mvn -pl meshforge -Pbench test-compile exec:java -Djmh.filter='.*MeshSizeScalingBenchmark.*'
+JMH_FILTER='.*MeshSizeScalingBenchmark.*' ./scripts/run-jmh.sh
 ```
 
 ## Optimize Cache Timeline

@@ -303,7 +303,7 @@ mvn clean test                          # build and test all modules
 mvn -pl meshforge clean test            # build/test core mesh module only
 mvn -pl meshforge-loader clean test     # build/test loader module
 mvn -pl meshforge-demo package          # build demo module
-mvn -pl meshforge -Pbench test-compile exec:java   # run JMH benchmarks for meshforge module
+./scripts/run-jmh.sh                    # run JMH benchmarks for meshforge module (fork-capable)
 ```
 
 ---
@@ -355,17 +355,12 @@ Command run outside sandbox on February 22, 2026:
 ./scripts/run-jmh.sh
 ```
 
-Forked run outside sandbox (recommended for trustworthy numbers):
-
-```bash
-mvn -pl meshforge -Pbench test-compile exec:java -Djmh.forks=1 -Djmh.filter='.*(OptimizeVertexCacheBenchmark|MeshPackerBenchmark|MeshPipelineBenchmark).*'
-```
-
 Reliable forked runner script (uses direct `java -cp ...` and works outside sandbox):
 
 ```bash
 ./scripts/run-jmh.sh
 JMH_FILTER='.*MeshPackerBenchmark.*' JMH_FORKS=2 ./scripts/run-jmh.sh
+JMH_FILTER='.*MeshPackerBenchmark\\.(packRealtime|packRealtimeOctaNormals).*' JMH_FORKS=1 JMH_JAVA_OPTS='-Dmeshforge.pack.simd.enabled=true' ./scripts/run-jmh.sh
 ```
 
 Results (JMH `avgt`, forked, `Cnt=5`):
