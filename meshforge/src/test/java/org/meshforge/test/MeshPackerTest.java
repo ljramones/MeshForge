@@ -121,4 +121,59 @@ class MeshPackerTest {
 
         assertThrows(IllegalStateException.class, () -> MeshPacker.pack(mesh, spec));
     }
+
+    @Test
+    void realtimeWithMeshletsBuildsDescriptorsWithinLimits() {
+        VertexSchema schema = VertexSchema.builder()
+            .add(AttributeSemantic.POSITION, 0, VertexFormat.F32x3)
+            .build();
+
+        int vertexCount = 16;
+        int[] indices = {
+            0, 1, 2, 0, 2, 3,
+            4, 5, 6, 4, 6, 7,
+            8, 9, 10, 8, 10, 11,
+            12, 13, 14, 12, 14, 15
+        };
+        MeshData mesh = new MeshData(
+            Topology.TRIANGLES,
+            schema,
+            vertexCount,
+            indices,
+            List.of(new Submesh(0, indices.length, "m"))
+        );
+
+        float[] pos = mesh.attribute(AttributeSemantic.POSITION, 0).rawFloatArrayOrNull();
+        assertNotNull(pos);
+        for (int i = 0; i < vertexCount; i++) {
+            pos[i * 3] = i;
+            pos[i * 3 + 1] = 0.0f;
+            pos[i * 3 + 2] = 0.0f;
+        }
+
+        PackSpec spec = PackSpec.builder()
+            .layout(PackSpec.LayoutMode.INTERLEAVED)
+            .alignment(16)
+            .indexPolicy(PackSpec.IndexPolicy.AUTO_16_IF_POSSIBLE)
+            .target(AttributeSemantic.POSITION, 0, VertexFormat.F32x3)
+            .meshletsEnabled(true)
+            .maxMeshletVertices(6)
+            .maxMeshletTriangles(2)
+            .build();
+
+        PackedMesh packed = MeshPacker.pack(mesh, spec);
+        assertTrue(packed.hasMeshlets());
+        var meshlets = packed.meshletsOrNull();
+        assertNotNull(meshlets);
+        assertTrue(meshlets.meshletCount() >= 4);
+
+        int totalTri = 0;
+        for (int i = 0; i < meshlets.meshletCount(); i++) {
+            var m = meshlets.meshlet(i);
+            assertTrue(m.triangleCount() <= 2);
+            assertTrue(m.uniqueVertexCount() <= 6);
+            totalTri += m.triangleCount();
+        }
+        assertEquals(indices.length / 3, totalTri);
+    }
 }

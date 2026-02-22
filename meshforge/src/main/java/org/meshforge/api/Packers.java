@@ -25,4 +25,8 @@ public final class Packers {
     public static PackSpec realtimeMinimal() {
         return PackSpec.realtimeMinimal();
     }
+
+    public static PackSpec realtimeWithMeshlets() {
+        return PackSpec.realtimeWithMeshlets();
+    }
 }

@@ -6,6 +6,8 @@ import org.meshforge.core.attr.VertexAttributeView;
 import org.meshforge.core.attr.VertexFormat;
 import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
+import org.meshforge.ops.optimize.MeshletClusters;
+import org.meshforge.pack.buffer.MeshletBufferView;
 import org.meshforge.pack.buffer.PackedMesh;
 import org.meshforge.pack.layout.VertexLayout;
 import org.meshforge.pack.spec.PackSpec;
@@ -316,7 +318,14 @@ public final class MeshPacker {
             profile.setTotalNs(System.nanoTime() - totalStart);
         }
 
-        return new PackedMesh(layout, vertexBuffer, indexBuffer, submeshes);
+        MeshletBufferView meshlets = null;
+        if (spec.meshletsEnabled() && indices != null && indices.length > 0) {
+            meshlets = MeshletBufferView.of(
+                MeshletClusters.buildMeshlets(mesh, indices, spec.maxMeshletVertices(), spec.maxMeshletTriangles())
+            );
+        }
+
+        return new PackedMesh(layout, vertexBuffer, indexBuffer, submeshes, meshlets);
     }
 
     private static int add(

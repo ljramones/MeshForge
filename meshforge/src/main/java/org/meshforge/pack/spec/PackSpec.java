@@ -21,6 +21,9 @@ public final class PackSpec {
     private final boolean computeBoundsIfMissing;
     private final boolean failIfMissingNormals;
     private final boolean failIfMissingTangents;
+    private final boolean meshletsEnabled;
+    private final int maxMeshletVertices;
+    private final int maxMeshletTriangles;
     private final Map<AttributeKey, VertexFormat> targetFormats;
 
     private PackSpec(Builder builder) {
@@ -31,6 +34,9 @@ public final class PackSpec {
         this.computeBoundsIfMissing = builder.computeBoundsIfMissing;
         this.failIfMissingNormals = builder.failIfMissingNormals;
         this.failIfMissingTangents = builder.failIfMissingTangents;
+        this.meshletsEnabled = builder.meshletsEnabled;
+        this.maxMeshletVertices = builder.maxMeshletVertices;
+        this.maxMeshletTriangles = builder.maxMeshletTriangles;
         this.targetFormats = Collections.unmodifiableMap(new LinkedHashMap<>(builder.targetFormats));
     }
 
@@ -64,6 +70,18 @@ public final class PackSpec {
 
     public Map<AttributeKey, VertexFormat> targetFormats() {
         return targetFormats;
+    }
+
+    public boolean meshletsEnabled() {
+        return meshletsEnabled;
+    }
+
+    public int maxMeshletVertices() {
+        return maxMeshletVertices;
+    }
+
+    public int maxMeshletTriangles() {
+        return maxMeshletTriangles;
     }
 
     public VertexFormat targetFormat(AttributeSemantic semantic, int setIndex) {
@@ -138,6 +156,28 @@ public final class PackSpec {
             .build();
     }
 
+    public static PackSpec realtimeWithMeshlets() {
+        return builder()
+            .layout(LayoutMode.INTERLEAVED)
+            .alignment(16)
+            .indexPolicy(IndexPolicy.AUTO_16_IF_POSSIBLE)
+            .target(AttributeSemantic.POSITION, 0, VertexFormat.F32x3)
+            .target(AttributeSemantic.NORMAL, 0, VertexFormat.SNORM8x4)
+            .target(AttributeSemantic.TANGENT, 0, VertexFormat.SNORM8x4)
+            .target(AttributeSemantic.UV, 0, VertexFormat.F16x2)
+            .target(AttributeSemantic.COLOR, 0, VertexFormat.UNORM8x4)
+            .target(AttributeSemantic.JOINTS, 0, VertexFormat.U8x4)
+            .target(AttributeSemantic.WEIGHTS, 0, VertexFormat.UNORM8x4)
+            .dropUnknownAttributes(true)
+            .computeBoundsIfMissing(true)
+            .failIfMissingNormals(false)
+            .failIfMissingTangents(false)
+            .meshletsEnabled(true)
+            .maxMeshletVertices(128)
+            .maxMeshletTriangles(64)
+            .build();
+    }
+
     public static final class Builder {
         private LayoutMode layoutMode = LayoutMode.INTERLEAVED;
         private int alignmentBytes = 16;
@@ -146,6 +186,9 @@ public final class PackSpec {
         private boolean computeBoundsIfMissing = true;
         private boolean failIfMissingNormals;
         private boolean failIfMissingTangents;
+        private boolean meshletsEnabled;
+        private int maxMeshletVertices = 128;
+        private int maxMeshletTriangles = 64;
         private final LinkedHashMap<AttributeKey, VertexFormat> targetFormats = new LinkedHashMap<>();
 
         public Builder layout(LayoutMode mode) {
@@ -183,6 +226,27 @@ public final class PackSpec {
 
         public Builder failIfMissingTangents(boolean value) {
             this.failIfMissingTangents = value;
+            return this;
+        }
+
+        public Builder meshletsEnabled(boolean value) {
+            this.meshletsEnabled = value;
+            return this;
+        }
+
+        public Builder maxMeshletVertices(int value) {
+            if (value < 3 || value > 256) {
+                throw new IllegalArgumentException("maxMeshletVertices must be in [3, 256]");
+            }
+            this.maxMeshletVertices = value;
+            return this;
+        }
+
+        public Builder maxMeshletTriangles(int value) {
+            if (value < 1 || value > 256) {
+                throw new IllegalArgumentException("maxMeshletTriangles must be in [1, 256]");
+            }
+            this.maxMeshletTriangles = value;
             return this;
         }
 

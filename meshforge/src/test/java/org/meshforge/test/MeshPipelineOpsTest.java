@@ -237,6 +237,42 @@ class MeshPipelineOpsTest {
         assertThrows(UnsupportedOperationException.class, () -> MeshPipeline.run(mesh, Ops.triangulate()));
     }
 
+    @Test
+    void clusterizeMeshletsReordersDeterministicallyAndPreservesTriangleCount() {
+        MeshData a = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            8,
+            new int[] {
+                0, 1, 2,
+                2, 3, 0,
+                4, 5, 6,
+                6, 7, 4
+            },
+            List.of(new Submesh(0, 12, "m"))
+        );
+        MeshData b = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            8,
+            new int[] {
+                0, 1, 2,
+                2, 3, 0,
+                4, 5, 6,
+                6, 7, 4
+            },
+            List.of(new Submesh(0, 12, "m"))
+        );
+
+        MeshData outA = MeshPipeline.run(a, Ops.clusterizeMeshlets(4, 2));
+        MeshData outB = MeshPipeline.run(b, Ops.clusterizeMeshlets(4, 2));
+
+        assertNotNull(outA.indicesOrNull());
+        assertNotNull(outB.indicesOrNull());
+        assertEquals(12, outA.indicesOrNull().length);
+        assertArrayEquals(outA.indicesOrNull(), outB.indicesOrNull());
+    }
+
     private static VertexSchema positionSchema() {
         return VertexSchema.builder()
             .add(AttributeSemantic.POSITION, 0, VertexFormat.F32x3)
