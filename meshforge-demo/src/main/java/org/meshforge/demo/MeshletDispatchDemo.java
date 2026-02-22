@@ -66,6 +66,9 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 import org.meshforge.api.Ops;
 import org.meshforge.api.Packers;
 import org.meshforge.api.Pipelines;
+import org.meshforge.core.attr.AttributeKey;
+import org.meshforge.core.attr.AttributeSemantic;
+import org.meshforge.core.attr.VertexFormat;
 import org.meshforge.loader.MeshLoaders;
 import org.meshforge.ops.pipeline.MeshPipeline;
 import org.meshforge.pack.buffer.PackedMesh;
@@ -116,9 +119,15 @@ public final class MeshletDispatchDemo {
             uint firstIndex;
             uint indexCount;
             uint uniqueVertexCount;
-            vec3 bmin;
-            vec3 bmax;
-            vec3 coneAxis;
+            float minX;
+            float minY;
+            float minZ;
+            float maxX;
+            float maxY;
+            float maxZ;
+            float coneX;
+            float coneY;
+            float coneZ;
             float coneCutoff;
         };
 
@@ -126,10 +135,20 @@ public final class MeshletDispatchDemo {
             MeshletDesc meshlets[];
         } meshBuf;
 
+        layout(set = 0, binding = 1, std430) readonly buffer Vertices {
+            float vtxData[];
+        } vtxBuf;
+
+        layout(set = 0, binding = 2, std430) readonly buffer Indices {
+            uint idxData[];
+        } idxBuf;
+
         layout(push_constant) uniform Push {
             vec4 centerScale; // xyz center, w scale
             uint meshletCount;
             float triSize;
+            uint strideFloats;
+            uint positionOffsetFloats;
         } pc;
 
         layout(location = 0) out vec3 outColor[];
@@ -141,24 +160,40 @@ public final class MeshletDispatchDemo {
             }
 
             MeshletDesc m = meshBuf.meshlets[mid];
-            vec3 c = (m.bmin + m.bmax) * 0.5;
-            vec3 ndc = (c - pc.centerScale.xyz) / max(pc.centerScale.w, 1e-5);
+            if (m.indexCount < 3u) {
+                return;
+            }
 
-            float s = pc.triSize;
-            vec3 v0 = vec3(ndc.x - s, ndc.y - s * 0.6, 0.0);
-            vec3 v1 = vec3(ndc.x + s, ndc.y - s * 0.6, 0.0);
-            vec3 v2 = vec3(ndc.x, ndc.y + s, 0.0);
+            uint i0 = idxBuf.idxData[m.firstIndex + 0u];
+            uint i1 = idxBuf.idxData[m.firstIndex + 1u];
+            uint i2 = idxBuf.idxData[m.firstIndex + 2u];
+
+            uint o0 = i0 * pc.strideFloats + pc.positionOffsetFloats;
+            uint o1 = i1 * pc.strideFloats + pc.positionOffsetFloats;
+            uint o2 = i2 * pc.strideFloats + pc.positionOffsetFloats;
+
+            vec3 p0 = vec3(vtxBuf.vtxData[o0 + 0u], vtxBuf.vtxData[o0 + 1u], vtxBuf.vtxData[o0 + 2u]);
+            vec3 p1 = vec3(vtxBuf.vtxData[o1 + 0u], vtxBuf.vtxData[o1 + 1u], vtxBuf.vtxData[o1 + 2u]);
+            vec3 p2 = vec3(vtxBuf.vtxData[o2 + 0u], vtxBuf.vtxData[o2 + 1u], vtxBuf.vtxData[o2 + 2u]);
+
+            vec3 n0 = (p0 - pc.centerScale.xyz) / max(pc.centerScale.w, 1e-5);
+            vec3 n1 = (p1 - pc.centerScale.xyz) / max(pc.centerScale.w, 1e-5);
+            vec3 n2 = (p2 - pc.centerScale.xyz) / max(pc.centerScale.w, 1e-5);
+
+            vec3 centroid = vec3(
+                (m.minX + m.maxX) * 0.5,
+                (m.minY + m.maxY) * 0.5,
+                (m.minZ + m.maxZ) * 0.5
+            );
+            vec3 cNdc = (centroid - pc.centerScale.xyz) / max(pc.centerScale.w, 1e-5);
+            float z = clamp(cNdc.z * 0.2, -0.9, 0.9);
 
             SetMeshOutputsEXT(3, 1);
-            gl_MeshVerticesEXT[0].gl_Position = vec4(v0, 1.0);
-            gl_MeshVerticesEXT[1].gl_Position = vec4(v1, 1.0);
-            gl_MeshVerticesEXT[2].gl_Position = vec4(v2, 1.0);
+            gl_MeshVerticesEXT[0].gl_Position = vec4(n0.xy, z, 1.0);
+            gl_MeshVerticesEXT[1].gl_Position = vec4(n1.xy, z, 1.0);
+            gl_MeshVerticesEXT[2].gl_Position = vec4(n2.xy, z, 1.0);
 
-            vec3 col = vec3(
-                float((mid * 37u) % 255u) / 255.0,
-                float((mid * 67u) % 255u) / 255.0,
-                float((mid * 97u) % 255u) / 255.0
-            );
+            vec3 col = normalize(abs(vec3(m.coneX, m.coneY, m.coneZ)) + vec3(1e-3));
 
             outColor[0] = col;
             outColor[1] = col;
@@ -329,19 +364,39 @@ public final class MeshletDispatchDemo {
             long pipeline = VK10.VK_NULL_HANDLE;
             long meshShaderModule = VK10.VK_NULL_HANDLE;
             long fragShaderModule = VK10.VK_NULL_HANDLE;
-            BufferAllocation ssbo = null;
+            BufferAllocation meshletSsbo = null;
+            BufferAllocation vertexSsbo = null;
+            BufferAllocation indexSsbo = null;
             ImageAllocation colorImage = null;
             BufferAllocation readback = null;
             long imageView = VK10.VK_NULL_HANDLE;
             long framebuffer = VK10.VK_NULL_HANDLE;
 
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                ssbo = createBuffer(
+                meshletSsbo = createBuffer(
                     descriptorSrc.remaining(),
                     VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                     VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
                 );
-                upload(ssbo, descriptorSrc);
+                upload(meshletSsbo, descriptorSrc);
+
+                ByteBuffer vertexSrc = packed.vertexBuffer().duplicate();
+                vertexSrc.clear();
+                vertexSsbo = createBuffer(
+                    vertexSrc.remaining(),
+                    VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                );
+                upload(vertexSsbo, vertexSrc);
+
+                ByteBuffer expandedIndices = expandIndexBufferToU32(packed);
+                indexSsbo = createBuffer(
+                    expandedIndices.remaining(),
+                    VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                );
+                upload(indexSsbo, expandedIndices);
+                MemoryUtil.memFree(expandedIndices);
 
                 colorImage = createColorAttachmentImage(WIDTH, HEIGHT);
                 imageView = createImageView(colorImage.image, VK10.VK_FORMAT_R8G8B8A8_UNORM);
@@ -356,7 +411,15 @@ public final class MeshletDispatchDemo {
                 pipelineLayout = createPipelineLayout(descriptorSetLayout);
                 descriptorPool = createDescriptorPool();
                 descriptorSet = allocateDescriptorSet(descriptorPool, descriptorSetLayout);
-                updateDescriptorSet(descriptorSet, ssbo.buffer, descriptorSrc.remaining());
+                updateDescriptorSet(
+                    descriptorSet,
+                    meshletSsbo.buffer,
+                    descriptorSrc.remaining(),
+                    vertexSsbo.buffer,
+                    packed.vertexBuffer().capacity(),
+                    indexSsbo.buffer,
+                    (packed.indexBuffer() == null ? 0 : packed.indexBuffer().indexCount()) * 4
+                );
 
                 meshShaderModule = createShaderModule(compileToSpirv(MESH_SHADER_SOURCE, "meshlet_triangle.mesh.glsl"));
                 fragShaderModule = createShaderModule(compileToSpirv(FRAGMENT_SHADER_SOURCE, "meshlet_triangle.frag.glsl"));
@@ -391,9 +454,10 @@ public final class MeshletDispatchDemo {
                 );
 
                 PushConstants pc = computePushConstants(packed);
-                ByteBuffer push = stack.malloc(24);
+                ByteBuffer push = stack.malloc(32);
                 push.putFloat(pc.centerX).putFloat(pc.centerY).putFloat(pc.centerZ).putFloat(pc.scale);
                 push.putInt(pc.meshletCount).putFloat(pc.triSize);
+                push.putInt(pc.strideFloats).putInt(pc.positionOffsetFloats);
                 push.flip();
                 VK10.vkCmdPushConstants(cmd, pipelineLayout, EXTMeshShader.VK_SHADER_STAGE_MESH_BIT_EXT, 0, push);
 
@@ -428,7 +492,9 @@ public final class MeshletDispatchDemo {
                 if (descriptorSetLayout != VK10.VK_NULL_HANDLE) VK10.vkDestroyDescriptorSetLayout(device, descriptorSetLayout, null);
                 if (imageView != VK10.VK_NULL_HANDLE) VK10.vkDestroyImageView(device, imageView, null);
                 if (colorImage != null) destroy(colorImage);
-                if (ssbo != null) destroy(ssbo);
+                if (meshletSsbo != null) destroy(meshletSsbo);
+                if (vertexSsbo != null) destroy(vertexSsbo);
+                if (indexSsbo != null) destroy(indexSsbo);
                 if (readback != null) destroy(readback);
             }
         }
@@ -457,7 +523,37 @@ public final class MeshletDispatchDemo {
             float ey = maxY - minY;
             float ez = maxZ - minZ;
             float scale = Math.max(1e-4f, Math.max(ex, Math.max(ey, ez)) * 0.55f);
-            return new PushConstants(cx, cy, cz, scale, meshlets.meshletCount(), 0.01f);
+            var posEntry = packed.layout().entry(new AttributeKey(AttributeSemantic.POSITION, 0));
+            if (posEntry == null) {
+                throw new IllegalStateException("Packed layout missing POSITION[0]");
+            }
+            if (posEntry.format() != VertexFormat.F32x3) {
+                throw new IllegalStateException("Demo mesh shader currently expects POSITION[0] format F32x3, got: " + posEntry.format());
+            }
+            int strideFloats = packed.layout().strideBytes() / 4;
+            int positionOffsetFloats = posEntry.offsetBytes() / 4;
+            return new PushConstants(cx, cy, cz, scale, meshlets.meshletCount(), 0.01f, strideFloats, positionOffsetFloats);
+        }
+
+        private static ByteBuffer expandIndexBufferToU32(PackedMesh packed) {
+            PackedMesh.IndexBufferView ib = packed.indexBuffer();
+            if (ib == null || ib.indexCount() == 0) {
+                throw new IllegalStateException("PackedMesh has no index buffer; demo expects indexed meshlets.");
+            }
+            ByteBuffer src = ib.buffer().duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            src.clear();
+            ByteBuffer out = MemoryUtil.memAlloc(ib.indexCount() * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            if (ib.type() == PackedMesh.IndexType.UINT16) {
+                for (int i = 0; i < ib.indexCount(); i++) {
+                    out.putInt(src.getShort() & 0xFFFF);
+                }
+            } else {
+                for (int i = 0; i < ib.indexCount(); i++) {
+                    out.putInt(src.getInt());
+                }
+            }
+            out.flip();
+            return out;
         }
 
         private static VkInstance createInstance(MemoryStack stack) {
@@ -658,9 +754,19 @@ public final class MeshletDispatchDemo {
 
         private long createDescriptorSetLayout() {
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(1, stack);
+                VkDescriptorSetLayoutBinding.Buffer bindings = VkDescriptorSetLayoutBinding.calloc(3, stack);
                 bindings.get(0)
                     .binding(0)
+                    .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(EXTMeshShader.VK_SHADER_STAGE_MESH_BIT_EXT);
+                bindings.get(1)
+                    .binding(1)
+                    .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(EXTMeshShader.VK_SHADER_STAGE_MESH_BIT_EXT);
+                bindings.get(2)
+                    .binding(2)
                     .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(EXTMeshShader.VK_SHADER_STAGE_MESH_BIT_EXT);
@@ -683,7 +789,7 @@ public final class MeshletDispatchDemo {
                 pushRange.get(0)
                     .stageFlags(EXTMeshShader.VK_SHADER_STAGE_MESH_BIT_EXT)
                     .offset(0)
-                    .size(24);
+                    .size(32);
 
                 VkPipelineLayoutCreateInfo ci = VkPipelineLayoutCreateInfo.calloc(stack)
                     .sType(VK10.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO)
@@ -701,7 +807,7 @@ public final class MeshletDispatchDemo {
         private long createDescriptorPool() {
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 VkDescriptorPoolSize.Buffer sizes = VkDescriptorPoolSize.calloc(1, stack);
-                sizes.get(0).type(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(1);
+                sizes.get(0).type(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(3);
                 VkDescriptorPoolCreateInfo ci = VkDescriptorPoolCreateInfo.calloc(stack)
                     .sType(VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO)
                     .pPoolSizes(sizes)
@@ -730,19 +836,43 @@ public final class MeshletDispatchDemo {
             }
         }
 
-        private void updateDescriptorSet(long descriptorSet, long buffer, int sizeBytes) {
+        private void updateDescriptorSet(
+            long descriptorSet,
+            long meshletBuffer,
+            int meshletSizeBytes,
+            long vertexBuffer,
+            int vertexSizeBytes,
+            long indexBuffer,
+            int indexSizeBytes
+        ) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkDescriptorBufferInfo.Buffer info = VkDescriptorBufferInfo.calloc(1, stack);
-                info.get(0).buffer(buffer).offset(0).range(sizeBytes);
+                VkDescriptorBufferInfo.Buffer info = VkDescriptorBufferInfo.calloc(3, stack);
+                info.get(0).buffer(meshletBuffer).offset(0).range(meshletSizeBytes);
+                info.get(1).buffer(vertexBuffer).offset(0).range(vertexSizeBytes);
+                info.get(2).buffer(indexBuffer).offset(0).range(indexSizeBytes);
 
-                VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(1, stack);
+                VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(3, stack);
                 writes.get(0)
                     .sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
                     .dstSet(descriptorSet)
                     .dstBinding(0)
                     .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
-                    .pBufferInfo(info);
+                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1, stack).put(0, info.get(0)));
+                writes.get(1)
+                    .sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
+                    .dstSet(descriptorSet)
+                    .dstBinding(1)
+                    .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1, stack).put(0, info.get(1)));
+                writes.get(2)
+                    .sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
+                    .dstSet(descriptorSet)
+                    .dstBinding(2)
+                    .descriptorType(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .pBufferInfo(VkDescriptorBufferInfo.calloc(1, stack).put(0, info.get(2)));
                 VK10.vkUpdateDescriptorSets(device, writes, null);
             }
         }
@@ -1165,7 +1295,16 @@ public final class MeshletDispatchDemo {
         private record ImageAllocation(long image, long memory) {
         }
 
-        private record PushConstants(float centerX, float centerY, float centerZ, float scale, int meshletCount, float triSize) {
+        private record PushConstants(
+            float centerX,
+            float centerY,
+            float centerZ,
+            float scale,
+            int meshletCount,
+            float triSize,
+            int strideFloats,
+            int positionOffsetFloats
+        ) {
         }
     }
 

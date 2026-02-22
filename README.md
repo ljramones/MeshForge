@@ -313,7 +313,7 @@ mvn -pl meshforge-demo javafx:run
 ```
 
 3. `org.meshforge.demo.MeshletDispatchDemo` (headless Vulkan mesh-shader readiness)
-- Runs Vulkan preflight, loads a mesh, builds meshlets, compiles minimal mesh/fragment shaders, dispatches one triangle per meshlet to an offscreen target, and writes `perf/results/meshlet_output.png` plus checksum/luminance metrics.
+- Runs Vulkan preflight, loads a mesh, builds meshlets, compiles minimal mesh/fragment shaders, fetches real vertex positions from packed vertex/index buffers in the mesh shader, dispatches one triangle per meshlet to an offscreen target, and writes `perf/results/meshlet_output.png` plus checksum/luminance metrics.
 - On macOS, requires Vulkan loader (MoltenVK) available to LWJGL.
 - Optional shell preflight (recommended before Java preflight):
 
