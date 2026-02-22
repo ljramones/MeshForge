@@ -109,8 +109,15 @@ It contains:
 - `Submesh[]` ranges
 - computed `Boundsf` (AABB/Sphere)
 
+### Meshlet advantages
+When enabled, meshlets provide a compact cluster representation that improves downstream runtime behavior:
+- better locality (vertex reuse and cache behavior within small clusters)
+- finer visibility granularity (bounds and cone metadata per cluster)
+- descriptor-friendly structure for GPU-driven consumers
+- cleaner path to paging/streaming and compression by cluster
+
 ### VertexLayout
-Renderer-facing contract of semantics, formats, offsets, and per-buffer bindings/stride.
+Consumer-facing contract of semantics, formats, offsets, and per-buffer bindings/stride.
 
 ## Packing: MeshPacker and PackSpec
 

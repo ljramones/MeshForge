@@ -74,6 +74,30 @@ Contains packed vertex buffers, index buffer, layout metadata, and bounds.
 
 ---
 
+## Why Meshlets
+
+Meshlets improve geometry scalability and runtime efficiency for downstream consumers without changing MeshForge's core responsibilities.
+
+Why they matter:
+
+* Smaller, local triangle clusters improve vertex reuse and memory locality.
+* Coarse per-cluster bounds/cone data enables fine-grained visibility filtering.
+* Descriptor-friendly structure reduces command overhead in GPU-driven pipelines.
+* Cluster/page-oriented data is a strong base for streaming and compression workflows.
+
+Typical downstream impact (engine/runtime side):
+
+| Area | Without meshlets | With meshlets |
+|---|---|---|
+| Geometry scale | limited by coarse mesh granularity | much higher effective triangle budgets |
+| CPU submission/culling | high per-mesh overhead | lower overhead with cluster-level work |
+| Vertex/bandwidth efficiency | less local reuse | better locality and reduced bandwidth |
+| Streaming readiness | coarse asset chunks | natural fine-grained paging units |
+
+MeshForge provides the meshlet data model, clustering, ordering, and descriptor packing. Runtime dispatch and rendering policy remain outside MeshForge.
+
+---
+
 ## PackSpec
 
 Defines how a mesh is packed.
