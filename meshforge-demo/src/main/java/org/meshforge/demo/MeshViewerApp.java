@@ -24,10 +24,12 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.meshforge.api.Packers;
 import org.meshforge.api.Pipelines;
+import org.meshforge.core.attr.AttributeSemantic;
 import org.meshforge.loader.MeshLoaders;
 import org.meshforge.pack.packer.MeshPacker;
 
 import java.io.File;
+import java.util.Arrays;
 
 public final class MeshViewerApp extends Application {
     private static final String[] SUPPORTED_EXT = new String[] {"*.obj", "*.stl", "*.ply", "*.off"};
@@ -153,9 +155,11 @@ public final class MeshViewerApp extends Application {
             float radius = mesh.boundsOrNull() == null || mesh.boundsOrNull().sphere() == null
                 ? Float.NaN
                 : mesh.boundsOrNull().sphere().radius();
+            float viewRadius = estimateViewRadius(mesh);
             status.setText(file.getName() + " | vertices=" + mesh.vertexCount() +
                 " triangles=" + triangleCount + " indices=" + indexCount +
-                " radius=" + String.format("%.4f", radius));
+                " radius=" + String.format("%.4f", radius) +
+                " viewRadius=" + String.format("%.4f", viewRadius));
         } catch (Exception ex) {
             status.setText("Load failed: " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
             ex.printStackTrace(System.err);
@@ -175,7 +179,7 @@ public final class MeshViewerApp extends Application {
         float cx = bounds.sphere().centerX();
         float cy = bounds.sphere().centerY();
         float cz = bounds.sphere().centerZ();
-        float radius = Math.max(bounds.sphere().radius(), 1.0e-6f);
+        float radius = Math.max(estimateViewRadius(mesh), 1.0e-6f);
 
         double scale = TARGET_RADIUS / radius;
         view.setScaleX(scale);
@@ -196,5 +200,45 @@ public final class MeshViewerApp extends Application {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static float estimateViewRadius(org.meshforge.core.mesh.MeshData mesh) {
+        var bounds = mesh.boundsOrNull();
+        if (bounds == null || bounds.sphere() == null || !mesh.has(AttributeSemantic.POSITION, 0)) {
+            return 1.0f;
+        }
+
+        float centerX = bounds.sphere().centerX();
+        float centerY = bounds.sphere().centerY();
+        float centerZ = bounds.sphere().centerZ();
+        float[] positions = mesh.attribute(AttributeSemantic.POSITION, 0).rawFloatArrayOrNull();
+        if (positions == null || positions.length < 3) {
+            return Math.max(bounds.sphere().radius(), 1.0f);
+        }
+
+        int vertexCount = positions.length / 3;
+        int step = Math.max(1, vertexCount / 4096);
+        int sampleCount = (vertexCount + step - 1) / step;
+        float[] distances = new float[sampleCount];
+
+        int s = 0;
+        for (int v = 0; v < vertexCount; v += step) {
+            int p = v * 3;
+            float dx = positions[p] - centerX;
+            float dy = positions[p + 1] - centerY;
+            float dz = positions[p + 2] - centerZ;
+            distances[s++] = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+        Arrays.sort(distances, 0, s);
+
+        float p90 = distances[Math.max(0, (int) Math.floor((s - 1) * 0.90f))];
+        float p99 = distances[Math.max(0, (int) Math.floor((s - 1) * 0.99f))];
+        float max = distances[s - 1];
+
+        // If a few outliers dominate the radius, frame to p99 for visibility.
+        if (p99 > 0.0f && max > p99 * 4.0f) {
+            return Math.max(p99, 1.0e-6f);
+        }
+        return Math.max(p90, 1.0e-6f);
     }
 }
