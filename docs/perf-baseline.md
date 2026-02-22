@@ -10,6 +10,17 @@ This project uses a benchmark baseline gate for high-confidence performance trac
   - `baseline_ms_per_op`: expected baseline score in `ms/op`
   - `max_regression_pct`: allowed slowdown percentage before failure
 
+## Last Updated Benchmarks
+
+- Date: February 21, 2026
+- Environment: outside sandbox, JDK 25.0.1, forked JMH runs
+- Baseline references currently tracked:
+  - `OptimizeVertexCacheBenchmark.optimizeAndMeasureAcmr`: `294.325 ms/op`
+  - `MeshPipelineBenchmark.realtimePipeline`: `161.892 ms/op`
+  - `MeshPackerBenchmark.packRealtime`: `5.356 ms/op`
+  - `MeshOpsBenchmark.weld`: `3.478 ms/op`
+  - `MeshOpsBenchmark.recalculateTangents`: `1.109 ms/op`
+
 ## Run the Perf Gate
 
 Run outside sandbox on a stable machine profile:
