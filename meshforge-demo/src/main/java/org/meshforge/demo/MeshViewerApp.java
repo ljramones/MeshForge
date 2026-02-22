@@ -143,14 +143,25 @@ public final class MeshViewerApp extends Application {
             // Ensure pack path remains usable from UI flow.
             MeshPacker.pack(mesh, Packers.realtime());
 
-            var fxMesh = MeshFxBridge.toTriangleMesh(mesh);
+            var fxMeshes = MeshFxBridge.toTriangleMeshes(mesh);
+            Group meshGroup = new Group();
+            for (var fxMesh : fxMeshes) {
+                MeshView view = new MeshView(fxMesh);
+                view.setMaterial(new PhongMaterial(Color.rgb(210, 218, 232)));
+                // Show both winding directions to reduce "invisible mesh" cases from mixed winding.
+                view.setCullFace(CullFace.NONE);
+                view.setDrawMode(DrawMode.FILL);
+                meshGroup.getChildren().add(view);
 
-            MeshView view = new MeshView(fxMesh);
-            view.setMaterial(new PhongMaterial(Color.rgb(210, 218, 232)));
-            // Show both winding directions to reduce "invisible mesh" cases from mixed winding.
-            view.setCullFace(CullFace.NONE);
-            view.setDrawMode(DrawMode.FILL);
-            applyFraming(mesh, view);
+                if (SHOW_WIREFRAME_OVERLAY) {
+                    MeshView wire = new MeshView(fxMesh);
+                    wire.setMaterial(new PhongMaterial(Color.color(0.10, 0.10, 0.10)));
+                    wire.setCullFace(CullFace.NONE);
+                    wire.setDrawMode(DrawMode.LINE);
+                    meshGroup.getChildren().add(wire);
+                }
+            }
+            applyFraming(mesh, meshGroup);
             int indexCount = mesh.indicesOrNull() == null ? 0 : mesh.indicesOrNull().length;
             int triangleCount = indexCount / 3;
             float radius = mesh.boundsOrNull() == null || mesh.boundsOrNull().sphere() == null
@@ -159,25 +170,11 @@ public final class MeshViewerApp extends Application {
             float viewRadius = estimateViewRadius(mesh);
             float[] center = estimateViewCenter(mesh);
             double scale = TARGET_RADIUS / Math.max(viewRadius, 1.0e-6f);
-
-            if (SHOW_WIREFRAME_OVERLAY) {
-                MeshView wire = new MeshView(fxMesh);
-                wire.setMaterial(new PhongMaterial(Color.color(0.10, 0.10, 0.10)));
-                wire.setCullFace(CullFace.NONE);
-                wire.setDrawMode(DrawMode.LINE);
-                wire.setScaleX(view.getScaleX());
-                wire.setScaleY(view.getScaleY());
-                wire.setScaleZ(view.getScaleZ());
-                wire.setTranslateX(view.getTranslateX());
-                wire.setTranslateY(view.getTranslateY());
-                wire.setTranslateZ(view.getTranslateZ());
-                world.getChildren().setAll(view, wire);
-            } else {
-                world.getChildren().setAll(view);
-            }
+            world.getChildren().setAll(meshGroup);
 
             status.setText(file.getName() + " | vertices=" + mesh.vertexCount() +
                 " triangles=" + triangleCount + " indices=" + indexCount +
+                " chunks=" + fxMeshes.size() +
                 " radius=" + String.format("%.4f", radius) +
                 " viewRadius=" + String.format("%.4f", viewRadius) +
                 " center=(" + String.format("%.2f", center[0]) + "," +
@@ -194,7 +191,7 @@ public final class MeshViewerApp extends Application {
         launch(args);
     }
 
-    private void applyFraming(org.meshforge.core.mesh.MeshData mesh, MeshView view) {
+    private void applyFraming(org.meshforge.core.mesh.MeshData mesh, Group meshNode) {
         var bounds = mesh.boundsOrNull();
         if (bounds == null || bounds.sphere() == null) {
             return;
@@ -207,12 +204,12 @@ public final class MeshViewerApp extends Application {
         float radius = Math.max(frame.radius, 1.0e-6f);
 
         double scale = TARGET_RADIUS / radius;
-        view.setScaleX(scale);
-        view.setScaleY(scale);
-        view.setScaleZ(scale);
-        view.setTranslateX(-cx * scale);
-        view.setTranslateY(-cy * scale);
-        view.setTranslateZ(-cz * scale);
+        meshNode.setScaleX(scale);
+        meshNode.setScaleY(scale);
+        meshNode.setScaleZ(scale);
+        meshNode.setTranslateX(-cx * scale);
+        meshNode.setTranslateY(-cy * scale);
+        meshNode.setTranslateZ(-cz * scale);
         world.setTranslateX(0.0);
         world.setTranslateY(0.0);
 
