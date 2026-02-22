@@ -19,6 +19,18 @@ import java.util.List;
  * v1 supports vertex positions and face indices only.
  */
 public final class FastObjMeshLoader {
+    private static final double[] POW10_POS = new double[20];
+    private static final double[] POW10_NEG = new double[20];
+
+    static {
+        POW10_POS[0] = 1.0;
+        POW10_NEG[0] = 1.0;
+        for (int i = 1; i < POW10_POS.length; i++) {
+            POW10_POS[i] = POW10_POS[i - 1] * 10.0;
+            POW10_NEG[i] = POW10_NEG[i - 1] * 0.1;
+        }
+    }
+
     private FastObjMeshLoader() {
     }
 
@@ -277,10 +289,10 @@ public final class FastObjMeshLoader {
 
         double value = intPart;
         if (fracDigits > 0) {
-            value += fracPart / Math.pow(10.0, fracDigits);
+            value += fracPart * pow10Neg(fracDigits);
         }
         if (exp != 0) {
-            value *= Math.pow(10.0, exp);
+            value *= pow10(exp);
         }
         return (float) (sign * value);
     }
@@ -316,6 +328,35 @@ public final class FastObjMeshLoader {
 
     private static int byteAt(MappedByteBuffer buf, int i) {
         return buf.get(i) & 0xFF;
+    }
+
+    private static double pow10(int exp) {
+        if (exp >= 0) {
+            return pow10Pos(exp);
+        }
+        return pow10Neg(-exp);
+    }
+
+    private static double pow10Pos(int exp) {
+        if (exp < POW10_POS.length) {
+            return POW10_POS[exp];
+        }
+        double out = POW10_POS[POW10_POS.length - 1];
+        for (int i = POW10_POS.length - 1; i < exp; i++) {
+            out *= 10.0;
+        }
+        return out;
+    }
+
+    private static double pow10Neg(int exp) {
+        if (exp < POW10_NEG.length) {
+            return POW10_NEG[exp];
+        }
+        double out = POW10_NEG[POW10_NEG.length - 1];
+        for (int i = POW10_NEG.length - 1; i < exp; i++) {
+            out *= 0.1;
+        }
+        return out;
     }
 
     private static final class FloatArray {
