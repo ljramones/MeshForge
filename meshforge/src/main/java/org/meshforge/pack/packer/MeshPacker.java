@@ -8,6 +8,7 @@ import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
 import org.meshforge.ops.optimize.MeshletClusters;
 import org.meshforge.pack.buffer.MeshletBufferView;
+import org.meshforge.pack.buffer.MeshletBuffers;
 import org.meshforge.pack.buffer.PackedMesh;
 import org.meshforge.pack.layout.VertexLayout;
 import org.meshforge.pack.spec.PackSpec;
@@ -319,13 +320,25 @@ public final class MeshPacker {
         }
 
         MeshletBufferView meshlets = null;
+        ByteBuffer meshletDescriptorBuffer = null;
+        int meshletDescriptorStrideBytes = 0;
         if (spec.meshletsEnabled() && indices != null && indices.length > 0) {
             meshlets = MeshletBufferView.of(
                 MeshletClusters.buildMeshlets(mesh, indices, spec.maxMeshletVertices(), spec.maxMeshletTriangles())
             );
+            meshletDescriptorStrideBytes = MeshletBuffers.descriptorStrideBytes(spec.alignmentBytes());
+            meshletDescriptorBuffer = MeshletBuffers.packDescriptors(meshlets, spec.alignmentBytes());
         }
 
-        return new PackedMesh(layout, vertexBuffer, indexBuffer, submeshes, meshlets);
+        return new PackedMesh(
+            layout,
+            vertexBuffer,
+            indexBuffer,
+            submeshes,
+            meshlets,
+            meshletDescriptorBuffer,
+            meshletDescriptorStrideBytes
+        );
     }
 
     private static int add(

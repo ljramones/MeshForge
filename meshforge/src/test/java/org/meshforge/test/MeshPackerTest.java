@@ -9,6 +9,7 @@ import org.meshforge.core.mesh.MeshData;
 import org.meshforge.core.mesh.Submesh;
 import org.meshforge.core.topology.Topology;
 import org.meshforge.pack.buffer.PackedMesh;
+import org.meshforge.pack.buffer.MeshletBuffers;
 import org.meshforge.pack.packer.MeshPacker;
 import org.meshforge.pack.spec.PackSpec;
 
@@ -166,6 +167,10 @@ class MeshPackerTest {
         var meshlets = packed.meshletsOrNull();
         assertNotNull(meshlets);
         assertTrue(meshlets.meshletCount() >= 4);
+        assertNotNull(packed.meshletDescriptorBufferOrNull());
+        int expectedStride = MeshletBuffers.descriptorStrideBytes(16);
+        assertEquals(expectedStride, packed.meshletDescriptorStrideBytes());
+        assertEquals(meshlets.meshletCount() * expectedStride, packed.meshletDescriptorBufferOrNull().capacity());
 
         int totalTri = 0;
         for (int i = 0; i < meshlets.meshletCount(); i++) {

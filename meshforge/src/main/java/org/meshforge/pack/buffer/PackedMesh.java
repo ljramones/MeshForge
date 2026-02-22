@@ -11,6 +11,8 @@ public final class PackedMesh {
     private final IndexBufferView indexBuffer;
     private final List<SubmeshRange> submeshes;
     private final MeshletBufferView meshlets;
+    private final ByteBuffer meshletDescriptorBuffer;
+    private final int meshletDescriptorStrideBytes;
 
     public PackedMesh(
         VertexLayout layout,
@@ -28,11 +30,25 @@ public final class PackedMesh {
         List<SubmeshRange> submeshes,
         MeshletBufferView meshlets
     ) {
+        this(layout, vertexBuffer, indexBuffer, submeshes, meshlets, null, 0);
+    }
+
+    public PackedMesh(
+        VertexLayout layout,
+        ByteBuffer vertexBuffer,
+        IndexBufferView indexBuffer,
+        List<SubmeshRange> submeshes,
+        MeshletBufferView meshlets,
+        ByteBuffer meshletDescriptorBuffer,
+        int meshletDescriptorStrideBytes
+    ) {
         this.layout = layout;
         this.vertexBuffer = vertexBuffer;
         this.indexBuffer = indexBuffer;
         this.submeshes = List.copyOf(submeshes);
         this.meshlets = meshlets;
+        this.meshletDescriptorBuffer = meshletDescriptorBuffer;
+        this.meshletDescriptorStrideBytes = meshletDescriptorStrideBytes;
     }
 
     public VertexLayout layout() {
@@ -57,6 +73,14 @@ public final class PackedMesh {
 
     public boolean hasMeshlets() {
         return meshlets != null && meshlets.meshletCount() > 0;
+    }
+
+    public ByteBuffer meshletDescriptorBufferOrNull() {
+        return meshletDescriptorBuffer;
+    }
+
+    public int meshletDescriptorStrideBytes() {
+        return meshletDescriptorStrideBytes;
     }
 
     public record SubmeshRange(int firstIndex, int indexCount, Object materialId) {
