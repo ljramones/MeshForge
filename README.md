@@ -342,6 +342,37 @@ Baseline config is in `perf/baseline.csv`, with process notes in `docs/perf-base
 
 ---
 
+# Fixture Baseline Timings
+
+Command (run from repo root):
+
+```bash
+mvn -pl meshforge-demo -DskipTests compile
+mvn -pl meshforge-demo -Dexec.mainClass=org.meshforge.demo.BaselineFixtureTiming exec:java
+```
+
+Definitions:
+- `Load ms`: file read + parse into `MeshData` (`MeshLoaders.defaults().load(...)`)
+- `Create ms`: mesh runtime prep (`Pipelines.realtimeFast(...)` + `MeshPacker.pack(..., Packers.realtime())`)
+
+Snapshot (February 21, 2026, local machine run):
+
+| Fixture | Load ms (avg) | Create ms (avg) | Vertices | Triangles |
+|---|---:|---:|---:|---:|
+| `beast.obj` | 44.967 | 3.790 | 32311 | 64618 |
+| `cow.obj` | 2.984 | 0.340 | 2903 | 5804 |
+| `lucy.obj` | 57.453 | 4.156 | 49987 | 99970 |
+| `nefertiti.obj` | 48.478 | 4.010 | 49971 | 99938 |
+| `RevitHouse.obj` | 697.644 | 98.914 | 1242180 | 412119 |
+| `stanford-bunny.obj` | 28.193 | 2.994 | 35947 | 69451 |
+| `suzanne.obj` | 0.438 | 0.058 | 507 | 968 |
+| `teapot.obj` | 2.495 | 0.331 | 3644 | 6320 |
+| `xyzrgb_dragon.obj` | 152.676 | 10.852 | 125066 | 249882 |
+
+These are fixture-level throughput indicators and will vary by CPU/JVM/load.
+
+---
+
 # Current Scope (v1)
 
 * Editable mesh model (`MeshData`)
