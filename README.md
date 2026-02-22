@@ -124,6 +124,12 @@ Cross-library ownership boundaries (Vectrix, MeshForge, DynamisLightEngine) are 
 docs/adr/0001-library-boundaries.md
 ```
 
+Detailed integration rules and enforcement notes are in:
+
+```
+docs/boundaries.md
+```
+
 Loader format rollout planning is tracked in:
 
 ```
@@ -220,6 +226,14 @@ PR smell checks:
 - Math duplicated outside `vectrix`.
 - Mesh processing duplicated outside `meshforge`.
 - Rendering API logic introduced into `meshforge`.
+
+`meshforge-demo` is a non-contract smoke/integration harness. Demo code may use LWJGL/Vulkan/shaderc for validation, but this is intentionally outside MeshForge core API guarantees.
+
+Guardrail command:
+
+```bash
+./scripts/ci_guardrails.sh
+```
 
 ---
 
