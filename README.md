@@ -409,15 +409,15 @@ Legacy vs fast total-time deltas (same fixture set):
 
 | Fixture | Legacy Total (median / p95) | Fast Total (median / p95) | Speedup |
 |---|---:|---:|---:|
-| `beast.obj` | 48 ms / 50 ms | 7.561 ms / 14.475 ms | 6.35x |
-| `cow.obj` | 2 ms / 3 ms | 821 us / 980 us | 2.44x |
-| `lucy.obj` | 62 ms / 76 ms | 11.847 ms / 12.372 ms | 5.23x |
-| `nefertiti.obj` | 53 ms / 57 ms | 10.927 ms / 10.989 ms | 4.85x |
-| `RevitHouse.obj` | 830 ms / 863 ms | 161.092 ms / 173.931 ms | 5.15x |
-| `stanford-bunny.obj` | 32 ms / 32 ms | 6.177 ms / 6.251 ms | 5.18x |
-| `suzanne.obj` | 0 ms / 0 ms | 132 us / 169 us | n/a (legacy rounded to 0 ms) |
-| `teapot.obj` | 2 ms / 3 ms | 616 us / 647 us | 3.25x |
-| `xyzrgb_dragon.obj` | 170 ms / 204 ms | 24.308 ms / 26.528 ms | 6.99x |
+| `beast.obj` | 48 ms / 50 ms | 4.411 ms / 10.910 ms | 10.88x |
+| `cow.obj` | 2 ms / 3 ms | 430 us / 504 us | 4.65x |
+| `lucy.obj` | 62 ms / 76 ms | 7.447 ms / 7.479 ms | 8.33x |
+| `nefertiti.obj` | 53 ms / 57 ms | 6.499 ms / 6.806 ms | 8.15x |
+| `RevitHouse.obj` | 830 ms / 863 ms | 87.089 ms / 89.072 ms | 9.53x |
+| `stanford-bunny.obj` | 32 ms / 32 ms | 3.976 ms / 4.034 ms | 8.05x |
+| `suzanne.obj` | 0 ms / 0 ms | 85 us / 125 us | n/a (legacy rounded to 0 ms) |
+| `teapot.obj` | 2 ms / 3 ms | 380 us / 414 us | 5.26x |
+| `xyzrgb_dragon.obj` | 170 ms / 204 ms | 17.362 ms / 18.697 ms | 9.79x |
 
 ### Pack Breakdown Timings
 
@@ -445,21 +445,13 @@ mvn -pl meshforge-demo -Dexec.mainClass=org.meshforge.demo.PhaseSplitFixtureTimi
 CSV output is written to `perf/results/pack-breakdown-*.csv` with per-fixture medians/p95 and normalized totals.
 `--pack-minimal` uses `Packers.realtimeMinimal()` (position-only pack target) for quick deltas.
 
-Latest pack-breakdown snapshot (`--fast`, realtime spec, February 21, 2026):
+Latest pack-breakdown snapshot (`--fast`, realtime spec, February 22, 2026):
 
 | Fixture | Pack Total (median / p95) | Vertex (median) | Position (median) | Normal (median) | Index (median) |
 |---|---:|---:|---:|---:|---:|
-| `beast.obj` | 5.583 ms / 5.839 ms | 5.469 ms | 358 us | 534 us | 118 us |
-| `cow.obj` | 499 us / 718 us | 488 us | 31 us | 46 us | 9 us |
-| `lucy.obj` | 6.615 ms / 6.755 ms | 6.445 ms | 466 us | 659 us | 160 us |
-| `nefertiti.obj` | 6.530 ms / 6.714 ms | 6.348 ms | 310 us | 626 us | 177 us |
-| `RevitHouse.obj` | 118.597 ms / 150.391 ms | 118.179 ms | 8.785 ms | 16.045 ms | 431 us |
-| `stanford-bunny.obj` | 3.738 ms / 8.596 ms | 3.615 ms | 434 us | 521 us | 113 us |
-| `suzanne.obj` | 65 us / 84 us | 57 us | 7 us | 8 us | 3 us |
-| `teapot.obj` | 407 us / 519 us | 396 us | 40 us | 52 us | 9 us |
-| `xyzrgb_dragon.obj` | 12.190 ms / 12.361 ms | 11.732 ms | 784 us | 1.469 ms | 416 us |
+| `RevitHouse.obj` | 55.117 ms / 59.575 ms | 54.564 ms | 17.091 ms | 10.332 ms | 531 us |
 
-The current pack hotspot is the vertex write/format conversion loop; layout/resolve/submesh are effectively noise at this scale.
+The current pack hotspot is still the vertex write/format conversion loop; layout/resolve/submesh remain small.
 Note: sub-phase mode includes per-section instrumentation (`System.nanoTime`) and is intended for hotspot ranking, not absolute cross-mode throughput comparison.
 
 CSV outputs are written to `perf/results/phase-split-legacy-<timestamp>.csv` and `perf/results/phase-split-fast-<timestamp>.csv`.
