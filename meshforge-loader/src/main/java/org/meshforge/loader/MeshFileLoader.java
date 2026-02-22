@@ -8,4 +8,8 @@ import java.nio.file.Path;
 @FunctionalInterface
 public interface MeshFileLoader {
     MeshData load(Path path) throws IOException;
+
+    default MeshData load(Path path, MeshLoadOptions options) throws IOException {
+        return load(path);
+    }
 }

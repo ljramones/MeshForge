@@ -29,11 +29,11 @@ public final class MeshLoaderFactory {
     }
 
     public static MeshFileLoader gltf() {
-        return unsupported("gltf");
+        return new GltfMeshLoader();
     }
 
     public static MeshFileLoader glb() {
-        return unsupported("glb");
+        return new GltfMeshLoader();
     }
 
     public static MeshFileLoader dae() {

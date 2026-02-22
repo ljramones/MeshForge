@@ -38,6 +38,40 @@ class MeshLoadersTest {
     }
 
     @Test
+    void gltfMeshoptDetectionHonorsDecodeOption(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("mesh.gltf");
+        Files.writeString(file, """
+            {
+              "asset": {"version":"2.0"},
+              "extensionsUsed": ["KHR_meshopt_compression"]
+            }
+            """, StandardCharsets.UTF_8);
+
+        MeshLoaders loaders = MeshLoaders.planned();
+        MeshLoadOptions disabled = MeshLoadOptions.builder().meshoptDecodeEnabled(false).build();
+        IOException disabledEx = assertThrows(IOException.class, () -> loaders.load(file, disabled));
+        assertTrue(disabledEx.getMessage().contains("meshopt decode is disabled"));
+
+        MeshLoadOptions enabled = MeshLoadOptions.builder().meshoptDecodeEnabled(true).build();
+        IOException enabledEx = assertThrows(IOException.class, () -> loaders.load(file, enabled));
+        assertTrue(enabledEx.getMessage().contains("meshopt decode hook is enabled"));
+    }
+
+    @Test
+    void gltfWithoutMeshoptReturnsNotImplementedPlaceholder(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("plain.gltf");
+        Files.writeString(file, """
+            {
+              "asset": {"version":"2.0"}
+            }
+            """, StandardCharsets.UTF_8);
+
+        MeshLoaders loaders = MeshLoaders.planned();
+        IOException ex = assertThrows(IOException.class, () -> loaders.load(file, MeshLoadOptions.defaults()));
+        assertTrue(ex.getMessage().contains("not implemented yet"));
+    }
+
+    @Test
     void defaultsStillRejectUnknownFormats() {
         MeshLoaders loaders = MeshLoaders.defaults();
         IOException ex = assertThrows(IOException.class, () -> loaders.load(Path.of("mesh.xyz")));

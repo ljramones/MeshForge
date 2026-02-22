@@ -82,12 +82,16 @@ public final class MeshLoaders {
     }
 
     public MeshData load(Path path) throws IOException {
+        return load(path, MeshLoadOptions.defaults());
+    }
+
+    public MeshData load(Path path, MeshLoadOptions options) throws IOException {
         String ext = extension(path);
         MeshFileLoader loader = byExtension.get(ext);
         if (loader == null) {
             throw new IOException("Unsupported mesh format: " + ext + " for " + path);
         }
-        return loader.load(path);
+        return loader.load(path, options == null ? MeshLoadOptions.defaults() : options);
     }
 
     private static String extension(Path path) {
