@@ -176,6 +176,67 @@ class MeshPipelineOpsTest {
         assertNotNull(out.attribute(AttributeSemantic.NORMAL, 0).rawFloatArrayOrNull());
     }
 
+    @Test
+    void ensureTrianglesNoOpForIndexedTriangles() {
+        MeshData mesh = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            3,
+            new int[] {0, 1, 2},
+            List.of(new Submesh(0, 3, "m"))
+        );
+
+        MeshData out = MeshPipeline.run(mesh, Ops.triangulate());
+        assertSame(mesh, out);
+        assertArrayEquals(new int[] {0, 1, 2}, out.indicesOrNull());
+        assertEquals(1, out.submeshes().size());
+        assertEquals(3, out.submeshes().get(0).indexCount());
+    }
+
+    @Test
+    void ensureTrianglesBuildsSequentialIndicesForTriangleSoup() {
+        MeshData mesh = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            6,
+            null,
+            List.of()
+        );
+
+        MeshData out = MeshPipeline.run(mesh, Ops.ensureTriangles());
+        assertNotNull(out.indicesOrNull());
+        assertArrayEquals(new int[] {0, 1, 2, 3, 4, 5}, out.indicesOrNull());
+        assertEquals(1, out.submeshes().size());
+        assertEquals(0, out.submeshes().get(0).firstIndex());
+        assertEquals(6, out.submeshes().get(0).indexCount());
+    }
+
+    @Test
+    void ensureTrianglesFailsWhenTriangleSoupVertexCountIsInvalid() {
+        MeshData mesh = new MeshData(
+            Topology.TRIANGLES,
+            positionSchema(),
+            4,
+            null,
+            List.of()
+        );
+
+        assertThrows(IllegalStateException.class, () -> MeshPipeline.run(mesh, Ops.ensureTriangles()));
+    }
+
+    @Test
+    void ensureTrianglesFailsForNonTriangleTopology() {
+        MeshData mesh = new MeshData(
+            Topology.LINES,
+            positionSchema(),
+            2,
+            new int[] {0, 1},
+            List.of(new Submesh(0, 2, "m"))
+        );
+
+        assertThrows(UnsupportedOperationException.class, () -> MeshPipeline.run(mesh, Ops.triangulate()));
+    }
+
     private static VertexSchema positionSchema() {
         return VertexSchema.builder()
             .add(AttributeSemantic.POSITION, 0, VertexFormat.F32x3)

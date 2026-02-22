@@ -5,6 +5,7 @@ import org.meshforge.ops.generate.ComputeBoundsOp;
 import org.meshforge.ops.generate.RecalculateNormalsOp;
 import org.meshforge.ops.generate.RecalculateTangentsOp;
 import org.meshforge.ops.generate.RemoveDegeneratesOp;
+import org.meshforge.ops.modify.EnsureTrianglesOp;
 import org.meshforge.ops.optimize.CompactVerticesOp;
 import org.meshforge.ops.pipeline.MeshOp;
 import org.meshforge.ops.pipeline.ValidateOp;
@@ -48,5 +49,17 @@ public final class Ops {
 
     public static MeshOp compactVertices() {
         return new CompactVerticesOp();
+    }
+
+    public static MeshOp ensureTriangles() {
+        return new EnsureTrianglesOp();
+    }
+
+    /**
+     * v1 alias for triangle normalization.
+     * Full polygon triangulation modes are planned for a later model extension.
+     */
+    public static MeshOp triangulate() {
+        return new EnsureTrianglesOp();
     }
 }
