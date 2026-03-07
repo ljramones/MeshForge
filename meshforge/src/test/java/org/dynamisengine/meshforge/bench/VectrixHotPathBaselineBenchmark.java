@@ -69,10 +69,12 @@ public class VectrixHotPathBaselineBenchmark {
     @State(Scope.Benchmark)
     public static class PackState extends BaseMeshState {
         MeshPacker.RuntimePackWorkspace packWorkspace;
+        MeshPacker.RuntimePackWorkspacePool packWorkspacePool;
 
         @Setup(Level.Trial)
         public void setupPackTrial() {
             packWorkspace = new MeshPacker.RuntimePackWorkspace();
+            packWorkspacePool = new MeshPacker.RuntimePackWorkspacePool(8);
         }
     }
 
@@ -149,6 +151,18 @@ public class VectrixHotPathBaselineBenchmark {
     }
 
     @Benchmark
+    public void meshPackerRealtimeRuntimePooled(PackState state, Blackhole bh) {
+        MeshPacker.RuntimePackWorkspace workspace = state.packWorkspacePool.acquire();
+        try {
+            MeshPacker.packInto(state.template, PackSpec.realtime(), workspace);
+            bh.consume(workspace.vertexBytes());
+            bh.consume(workspace.indexBytes());
+        } finally {
+            state.packWorkspacePool.release(workspace);
+        }
+    }
+
+    @Benchmark
     public void recalculateTangentsRuntime(TangentState state, Blackhole bh) {
         MeshData out = state.tangentOp.applyWithWorkspace(state.working, state.tangentContext, state.tangentWorkspace);
         bh.consume(out.attributeFormats().size());
@@ -200,6 +214,20 @@ public class VectrixHotPathBaselineBenchmark {
         for (int i = 0; i < BATCH_SIZE; i++) {
             MeshPacker.packVertexPayloadInto(state.template, PackSpec.realtime(), state.packWorkspace);
             bh.consume(state.packWorkspace.vertexBytes());
+        }
+    }
+
+    @Benchmark
+    @OperationsPerInvocation(BATCH_SIZE)
+    public void meshPackerRealtimeRuntimePooledBatch(PackState state, Blackhole bh) {
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            MeshPacker.RuntimePackWorkspace workspace = state.packWorkspacePool.acquire();
+            try {
+                MeshPacker.packInto(state.template, PackSpec.realtime(), workspace);
+                bh.consume(workspace.vertexBytes());
+            } finally {
+                state.packWorkspacePool.release(workspace);
+            }
         }
     }
 

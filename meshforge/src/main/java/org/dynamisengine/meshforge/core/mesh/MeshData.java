@@ -33,6 +33,8 @@ public final class MeshData {
     private int[] indices;
     private final List<Submesh> submeshes = new ArrayList<>();
     private final List<MorphTarget> morphTargets = new ArrayList<>();
+    private final List<Submesh> submeshesView = Collections.unmodifiableList(submeshes);
+    private final List<MorphTarget> morphTargetsView = Collections.unmodifiableList(morphTargets);
     private Boundsf bounds;
 
     /**
@@ -174,7 +176,7 @@ public final class MeshData {
      * @return resulting value
      */
     public List<Submesh> submeshes() {
-        return Collections.unmodifiableList(submeshes);
+        return submeshesView;
     }
 
     /**
@@ -216,7 +218,7 @@ public final class MeshData {
      * @return resulting value
      */
     public List<MorphTarget> morphTargets() {
-        return Collections.unmodifiableList(morphTargets);
+        return morphTargetsView;
     }
 
     /**

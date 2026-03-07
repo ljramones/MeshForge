@@ -19,6 +19,7 @@ import org.dynamisengine.vectrix.gpu.PackedNorm;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -206,6 +207,41 @@ public final class MeshPacker {
                 submeshMaterial[i] = submesh.materialId();
             }
             submeshSize = size;
+        }
+    }
+
+    /**
+     * Small reusable pool for runtime pack workspaces.
+     * Callers can own one pool per worker/thread domain to amortize workspace lifetime.
+     */
+    public static final class RuntimePackWorkspacePool {
+        private final ArrayDeque<RuntimePackWorkspace> free;
+        private final int maxRetained;
+
+        public RuntimePackWorkspacePool(int maxRetained) {
+            if (maxRetained <= 0) {
+                throw new IllegalArgumentException("maxRetained must be > 0");
+            }
+            this.maxRetained = maxRetained;
+            this.free = new ArrayDeque<>(Math.min(maxRetained, 64));
+        }
+
+        public synchronized RuntimePackWorkspace acquire() {
+            RuntimePackWorkspace workspace = free.pollFirst();
+            return workspace == null ? new RuntimePackWorkspace() : workspace;
+        }
+
+        public synchronized void release(RuntimePackWorkspace workspace) {
+            if (workspace == null) {
+                return;
+            }
+            if (free.size() < maxRetained) {
+                free.addFirst(workspace);
+            }
+        }
+
+        public synchronized int retainedCount() {
+            return free.size();
         }
     }
 
