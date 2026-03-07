@@ -37,7 +37,7 @@ public class VectrixHotPathBaselineBenchmark {
     private static final int BATCH_SIZE = 64;
 
     @State(Scope.Benchmark)
-    public static class MeshState {
+    public abstract static class BaseMeshState {
         @Param({"SMALL", "MEDIUM", "LARGE", "ATTRIBUTE_HEAVY"})
         String workload;
 
@@ -45,11 +45,6 @@ public class VectrixHotPathBaselineBenchmark {
         boolean indexed;
 
         MeshData template;
-        MeshData working;
-        MeshPacker.RuntimePackWorkspace packWorkspace;
-        RecalculateTangentsOp tangentOp;
-        RecalculateTangentsOp.Workspace tangentWorkspace;
-        MeshContext tangentContext;
 
         @Setup(Level.Trial)
         public void trialSetup() {
@@ -58,15 +53,6 @@ public class VectrixHotPathBaselineBenchmark {
                 template.setIndices(null);
                 template.setSubmeshes(List.of());
             }
-            packWorkspace = new MeshPacker.RuntimePackWorkspace();
-            tangentOp = new RecalculateTangentsOp();
-            tangentWorkspace = new RecalculateTangentsOp.Workspace();
-            tangentContext = new MeshContext();
-        }
-
-        @Setup(Level.Invocation)
-        public void invocationSetup() {
-            working = BenchmarkFixtures.copyOf(template);
         }
 
         private static MeshData buildWorkload(String workload) {
@@ -77,6 +63,36 @@ public class VectrixHotPathBaselineBenchmark {
                 case "ATTRIBUTE_HEAVY" -> BenchmarkFixtures.createRichGrid(256, 256);
                 default -> throw new IllegalArgumentException("Unknown workload: " + workload);
             };
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class PackState extends BaseMeshState {
+        MeshPacker.RuntimePackWorkspace packWorkspace;
+
+        @Setup(Level.Trial)
+        public void setupPackTrial() {
+            packWorkspace = new MeshPacker.RuntimePackWorkspace();
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class TangentState extends BaseMeshState {
+        MeshData working;
+        RecalculateTangentsOp tangentOp;
+        RecalculateTangentsOp.Workspace tangentWorkspace;
+        MeshContext tangentContext;
+
+        @Setup(Level.Trial)
+        public void setupTangentTrial() {
+            tangentOp = new RecalculateTangentsOp();
+            tangentWorkspace = new RecalculateTangentsOp.Workspace();
+            tangentContext = new MeshContext();
+        }
+
+        @Setup(Level.Invocation)
+        public void setupTangentInvocation() {
+            working = BenchmarkFixtures.copyOf(template);
         }
     }
 
@@ -108,32 +124,32 @@ public class VectrixHotPathBaselineBenchmark {
     }
 
     @Benchmark
-    public void meshPackerRealtime(MeshState state, Blackhole bh) {
+    public void meshPackerRealtime(PackState state, Blackhole bh) {
         PackedMesh packed = MeshPacker.pack(state.template, PackSpec.realtime());
         bh.consume(packed.vertexBuffer().capacity());
     }
 
     @Benchmark
-    public void recalculateTangents(MeshState state, Blackhole bh) {
+    public void recalculateTangents(TangentState state, Blackhole bh) {
         MeshData out = MeshPipeline.run(state.working, Ops.tangents());
         bh.consume(out.attributeFormats().size());
     }
 
     @Benchmark
-    public void meshPackerRealtimeRuntime(MeshState state, Blackhole bh) {
+    public void meshPackerRealtimeRuntime(PackState state, Blackhole bh) {
         MeshPacker.packInto(state.template, PackSpec.realtime(), state.packWorkspace);
         bh.consume(state.packWorkspace.vertexBytes());
         bh.consume(state.packWorkspace.indexBytes());
     }
 
     @Benchmark
-    public void meshPackerRealtimeRuntimeVertexOnly(MeshState state, Blackhole bh) {
+    public void meshPackerRealtimeRuntimeVertexOnly(PackState state, Blackhole bh) {
         MeshPacker.packVertexPayloadInto(state.template, PackSpec.realtime(), state.packWorkspace);
         bh.consume(state.packWorkspace.vertexBytes());
     }
 
     @Benchmark
-    public void recalculateTangentsRuntime(MeshState state, Blackhole bh) {
+    public void recalculateTangentsRuntime(TangentState state, Blackhole bh) {
         MeshData out = state.tangentOp.applyWithWorkspace(state.working, state.tangentContext, state.tangentWorkspace);
         bh.consume(out.attributeFormats().size());
     }
@@ -152,7 +168,7 @@ public class VectrixHotPathBaselineBenchmark {
 
     @Benchmark
     @OperationsPerInvocation(BATCH_SIZE)
-    public void meshPackerRealtimeBatch(MeshState state, Blackhole bh) {
+    public void meshPackerRealtimeBatch(PackState state, Blackhole bh) {
         for (int i = 0; i < BATCH_SIZE; i++) {
             PackedMesh packed = MeshPacker.pack(state.template, PackSpec.realtime());
             bh.consume(packed.vertexBuffer().capacity());
@@ -161,8 +177,8 @@ public class VectrixHotPathBaselineBenchmark {
 
     @Benchmark
     @OperationsPerInvocation(BATCH_SIZE)
-    public void recalculateTangentsBatch(MeshState state, Blackhole bh) {
-        MeshData local = state.template;
+    public void recalculateTangentsBatch(TangentState state, Blackhole bh) {
+        MeshData local = state.working;
         for (int i = 0; i < BATCH_SIZE; i++) {
             local = MeshPipeline.run(local, Ops.tangents());
             bh.consume(local.vertexCount());
@@ -171,7 +187,7 @@ public class VectrixHotPathBaselineBenchmark {
 
     @Benchmark
     @OperationsPerInvocation(BATCH_SIZE)
-    public void meshPackerRealtimeRuntimeBatch(MeshState state, Blackhole bh) {
+    public void meshPackerRealtimeRuntimeBatch(PackState state, Blackhole bh) {
         for (int i = 0; i < BATCH_SIZE; i++) {
             MeshPacker.packInto(state.template, PackSpec.realtime(), state.packWorkspace);
             bh.consume(state.packWorkspace.vertexBytes());
@@ -180,7 +196,7 @@ public class VectrixHotPathBaselineBenchmark {
 
     @Benchmark
     @OperationsPerInvocation(BATCH_SIZE)
-    public void meshPackerRealtimeRuntimeVertexOnlyBatch(MeshState state, Blackhole bh) {
+    public void meshPackerRealtimeRuntimeVertexOnlyBatch(PackState state, Blackhole bh) {
         for (int i = 0; i < BATCH_SIZE; i++) {
             MeshPacker.packVertexPayloadInto(state.template, PackSpec.realtime(), state.packWorkspace);
             bh.consume(state.packWorkspace.vertexBytes());
@@ -189,8 +205,8 @@ public class VectrixHotPathBaselineBenchmark {
 
     @Benchmark
     @OperationsPerInvocation(BATCH_SIZE)
-    public void recalculateTangentsRuntimeBatch(MeshState state, Blackhole bh) {
-        MeshData local = state.template;
+    public void recalculateTangentsRuntimeBatch(TangentState state, Blackhole bh) {
+        MeshData local = state.working;
         for (int i = 0; i < BATCH_SIZE; i++) {
             local = state.tangentOp.applyWithWorkspace(local, state.tangentContext, state.tangentWorkspace);
             bh.consume(local.vertexCount());

@@ -656,6 +656,39 @@ Interpretation:
 - Keep and formalize runtime API (`packInto` + phase methods) for engine/world-construction paths.
 - Treat further allocation reduction as requiring contract-level ownership changes (for example persistent destination pools or externally managed payload lifetimes), not micro cleanup.
 
+## Benchmark Correction + JDK 25 Hot-Path Squeeze (2026-03-07)
+
+Sources:
+
+- corrected state split: `/tmp/mf_sprintB_meshpacker_split_jmh_fixedstate.txt`
+- key-allocation squeeze: `/tmp/mf_sprintC_meshpacker_keyopt_jmh.txt`
+
+Correction:
+
+- Earlier Sprint B `B/op` values were inflated by shared benchmark state setup (`BenchmarkFixtures.copyOf`) running for packer lanes.
+- Benchmark state is now split (`PackState` vs `TangentState`), so packer measurements reflect packer work instead of tangent setup churn.
+
+Post-correction `MeshPacker` (`indexed=false`, `avgt`, `B/op`):
+
+| Mode | SMALL | MEDIUM | LARGE | ATTRIBUTE_HEAVY |
+|---|---:|---:|---:|---:|
+| Friendly `pack(...)` | 2640.368 | 2645.060 | 2671.963 | 2660.630 |
+| Runtime `packInto(...)` | 1008.280 | 1012.056 | 1033.188 | 1024.186 |
+
+After key-based lookup optimization (`MeshData.has/attribute(AttributeKey)` + hot-path usage):
+
+| Mode | SMALL | MEDIUM | LARGE | ATTRIBUTE_HEAVY |
+|---|---:|---:|---:|---:|
+| Friendly `pack(...)` | 2304.369 | 2309.032 | 2335.673 | 2325.102 |
+| Runtime `packInto(...)` | 672.279 | 676.079 | 697.189 | 688.130 |
+
+Interpretation:
+
+- Runtime path is now roughly 3.3x lower-allocation than friendly API on corrected measurements.
+- `packInto(...)` and `packVertexPayloadInto(...)` remain effectively identical in `B/op`, confirming phase split correctness.
+- Remaining runtime-path allocation is now sub-kilobyte and mostly fixed per-call overhead.
+- JDK 25 preview path remains enabled for these runs (`--enable-preview`, vector module), and current gains come from data/access shape rather than speculative JVM-specific tricks.
+
 ## GC Pressure Watchlist
 
 - Do not create temporary vector/wrapper objects in inner loops.

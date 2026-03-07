@@ -261,6 +261,19 @@ public final class MeshData {
     }
 
     /**
+     * Checks whether this instance has the given attribute key.
+     *
+     * @param key attribute key
+     * @return {@code true} when present
+     */
+    public boolean has(AttributeKey key) {
+        if (key == null) {
+            throw new NullPointerException("key");
+        }
+        return attributes.containsKey(key);
+    }
+
+    /**
      * Returns a mutable view for the requested schema attribute.
      *
      * @param semantic attribute semantic
@@ -270,6 +283,24 @@ public final class MeshData {
      */
     public VertexAttributeView attribute(AttributeSemantic semantic, int setIndex) {
         AttributeKey key = new AttributeKey(semantic, setIndex);
+        AttributeStorage storage = attributes.get(key);
+        if (storage == null) {
+            throw new NoSuchElementException("Missing attribute: " + key);
+        }
+        return storage.view();
+    }
+
+    /**
+     * Returns a mutable view for the requested schema attribute key.
+     *
+     * @param key attribute key
+     * @return mutable attribute view
+     * @throws NoSuchElementException if the attribute is absent
+     */
+    public VertexAttributeView attribute(AttributeKey key) {
+        if (key == null) {
+            throw new NullPointerException("key");
+        }
         AttributeStorage storage = attributes.get(key);
         if (storage == null) {
             throw new NoSuchElementException("Missing attribute: " + key);

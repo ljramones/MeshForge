@@ -239,13 +239,13 @@ public final class MeshPacker {
         }
 
         long resolveStart = profile == null ? 0L : System.nanoTime();
-        VertexAttributeView position = require(mesh, AttributeSemantic.POSITION, 0);
-        VertexAttributeView normal = optional(mesh, AttributeSemantic.NORMAL, 0);
-        VertexAttributeView tangent = optional(mesh, AttributeSemantic.TANGENT, 0);
-        VertexAttributeView uv0 = optional(mesh, AttributeSemantic.UV, 0);
-        VertexAttributeView color0 = optional(mesh, AttributeSemantic.COLOR, 0);
-        VertexAttributeView joints0 = optional(mesh, AttributeSemantic.JOINTS, 0);
-        VertexAttributeView weights0 = optional(mesh, AttributeSemantic.WEIGHTS, 0);
+        VertexAttributeView position = require(mesh, POSITION_0);
+        VertexAttributeView normal = optional(mesh, NORMAL_0);
+        VertexAttributeView tangent = optional(mesh, TANGENT_0);
+        VertexAttributeView uv0 = optional(mesh, UV_0);
+        VertexAttributeView color0 = optional(mesh, COLOR_0);
+        VertexAttributeView joints0 = optional(mesh, JOINTS_0);
+        VertexAttributeView weights0 = optional(mesh, WEIGHTS_0);
 
         if (spec.failIfMissingNormals() && normal == null) {
             throw new IllegalStateException("Missing NORMAL[0] but PackSpec requires it");
@@ -633,13 +633,13 @@ public final class MeshPacker {
             throw new UnsupportedOperationException("packInto currently targets non-meshlet runtime path");
         }
 
-        VertexAttributeView position = require(mesh, AttributeSemantic.POSITION, 0);
-        VertexAttributeView normal = optional(mesh, AttributeSemantic.NORMAL, 0);
-        VertexAttributeView tangent = optional(mesh, AttributeSemantic.TANGENT, 0);
-        VertexAttributeView uv0 = optional(mesh, AttributeSemantic.UV, 0);
-        VertexAttributeView color0 = optional(mesh, AttributeSemantic.COLOR, 0);
-        VertexAttributeView joints0 = optional(mesh, AttributeSemantic.JOINTS, 0);
-        VertexAttributeView weights0 = optional(mesh, AttributeSemantic.WEIGHTS, 0);
+        VertexAttributeView position = require(mesh, POSITION_0);
+        VertexAttributeView normal = optional(mesh, NORMAL_0);
+        VertexAttributeView tangent = optional(mesh, TANGENT_0);
+        VertexAttributeView uv0 = optional(mesh, UV_0);
+        VertexAttributeView color0 = optional(mesh, COLOR_0);
+        VertexAttributeView joints0 = optional(mesh, JOINTS_0);
+        VertexAttributeView weights0 = optional(mesh, WEIGHTS_0);
 
         if (spec.failIfMissingNormals() && normal == null) {
             throw new IllegalStateException("Missing NORMAL[0] but PackSpec requires it");
@@ -988,15 +988,15 @@ public final class MeshPacker {
         return (value + mask) & ~mask;
     }
 
-    private static VertexAttributeView require(MeshData mesh, AttributeSemantic semantic, int setIndex) {
-        if (!mesh.has(semantic, setIndex)) {
-            throw new IllegalStateException("Missing required attribute: " + semantic + "[" + setIndex + "]");
+    private static VertexAttributeView require(MeshData mesh, AttributeKey key) {
+        if (!mesh.has(key)) {
+            throw new IllegalStateException("Missing required attribute: " + key.semantic() + "[" + key.setIndex() + "]");
         }
-        return mesh.attribute(semantic, setIndex);
+        return mesh.attribute(key);
     }
 
-    private static VertexAttributeView optional(MeshData mesh, AttributeSemantic semantic, int setIndex) {
-        return mesh.has(semantic, setIndex) ? mesh.attribute(semantic, setIndex) : null;
+    private static VertexAttributeView optional(MeshData mesh, AttributeKey key) {
+        return mesh.has(key) ? mesh.attribute(key) : null;
     }
 
     private static float[] requireFloat(VertexAttributeView view, String label) {

@@ -1,6 +1,7 @@
 package org.dynamisengine.meshforge.ops.generate;
 
 import org.dynamisengine.meshforge.core.attr.AttributeSemantic;
+import org.dynamisengine.meshforge.core.attr.AttributeKey;
 import org.dynamisengine.meshforge.core.attr.VertexAttributeView;
 import org.dynamisengine.meshforge.core.attr.VertexFormat;
 import org.dynamisengine.meshforge.core.mesh.MeshData;
@@ -15,6 +16,10 @@ import java.util.Arrays;
 public final class RecalculateTangentsOp implements MeshOp {
     private static final ThreadLocal<float[]> TAN_SCRATCH = ThreadLocal.withInitial(() -> new float[0]);
     private static final ThreadLocal<MeshContext> RUNTIME_CONTEXT = ThreadLocal.withInitial(MeshContext::new);
+    private static final AttributeKey POSITION_0 = new AttributeKey(AttributeSemantic.POSITION, 0);
+    private static final AttributeKey NORMAL_0 = new AttributeKey(AttributeSemantic.NORMAL, 0);
+    private static final AttributeKey UV_0 = new AttributeKey(AttributeSemantic.UV, 0);
+    private static final AttributeKey TANGENT_0 = new AttributeKey(AttributeSemantic.TANGENT, 0);
 
     /**
      * Reusable workspace for bounded-scratch tangent recomputation paths.
@@ -51,9 +56,9 @@ public final class RecalculateTangentsOp implements MeshOp {
      * @return processed mesh
      */
     public MeshData applyWithWorkspace(MeshData mesh, MeshContext context, Workspace workspace) {
-        VertexAttributeView position = require(mesh, AttributeSemantic.POSITION, 0);
-        VertexAttributeView normal = require(mesh, AttributeSemantic.NORMAL, 0);
-        VertexAttributeView uv = require(mesh, AttributeSemantic.UV, 0);
+        VertexAttributeView position = require(mesh, POSITION_0);
+        VertexAttributeView normal = require(mesh, NORMAL_0);
+        VertexAttributeView uv = require(mesh, UV_0);
 
         float[] pos = requireFloat(position, "POSITION");
         float[] nrm = requireFloat(normal, "NORMAL");
@@ -68,8 +73,8 @@ public final class RecalculateTangentsOp implements MeshOp {
         }
 
         VertexAttributeView tangent;
-        if (mesh.has(AttributeSemantic.TANGENT, 0)) {
-            tangent = mesh.attribute(AttributeSemantic.TANGENT, 0);
+        if (mesh.has(TANGENT_0)) {
+            tangent = mesh.attribute(TANGENT_0);
         } else {
             tangent = mesh.addAttribute(AttributeSemantic.TANGENT, 0, VertexFormat.F32x4);
         }
@@ -236,11 +241,11 @@ public final class RecalculateTangentsOp implements MeshOp {
         return grown;
     }
 
-    private static VertexAttributeView require(MeshData mesh, AttributeSemantic semantic, int setIndex) {
-        if (!mesh.has(semantic, setIndex)) {
-            throw new IllegalStateException("Missing required attribute: " + semantic + "[" + setIndex + "]");
+    private static VertexAttributeView require(MeshData mesh, AttributeKey key) {
+        if (!mesh.has(key)) {
+            throw new IllegalStateException("Missing required attribute: " + key.semantic() + "[" + key.setIndex() + "]");
         }
-        return mesh.attribute(semantic, setIndex);
+        return mesh.attribute(key);
     }
 
     private static float[] requireFloat(VertexAttributeView view, String label) {
