@@ -489,6 +489,123 @@ Interpretation:
 - `FILTER_NONE` path remains allocation-heavy by design because decode output is itself a new byte array payload.
 - Remaining structural options for `FILTER_NONE` would require API/ownership changes (for example caller-supplied output/scratch) and should be treated as a separate compatibility decision.
 
+## Sprint A Runtime Hardening Baseline (2026-03-07)
+
+Source: `/tmp/mf_sprintA_runtime_baseline_jmh.txt`  
+Settings: `forks=0`, `wi=1`, `i=2`, `-w 300ms`, `-r 300ms`, `-prof gc`  
+Scope: `MeshPacker` and `RecalculateTangentsOp` with existing API vs runtime fast-path prototype.
+
+### A1/A2 Allocation Ownership Map
+
+`MeshPacker` ownership map:
+
+| Category | Current owner | Classification | Notes |
+|---|---|---|---|
+| Final vertex payload (`ByteBuffer.allocateDirect(vertexCount * stride)`) | `MeshPacker.pack` | unavoidable under current contract | Core output bytes; dominates alloc/op. |
+| Final index payload (`ByteBuffer.allocateDirect(indexCount * 2/4)`) | `MeshPacker.pack` | unavoidable under current contract | Required output payload when indexed. |
+| `PackedMesh` + `IndexBufferView` result objects | `MeshPacker.pack` | avoidable only with API change | Friendly API must materialize immutable object graph. |
+| Submesh conversion (`Submesh` -> `SubmeshRange`, `ArrayList`, `List.copyOf`) | `copySubmeshRanges` + `PackedMesh` ctor | avoidable internally and/or via API split | Runtime path can keep caller-owned primitive metadata. |
+| Layout materialization (`LinkedHashMap` entries + `VertexLayout`) | per-call in `pack` | avoidable internally | Runtime workspace now caches by spec + attribute mask. |
+| Helper/access overhead (`mesh.submeshes()` wrapper view) | `MeshData` API | helper/API-induced | Small but measurable overhead. |
+
+`RecalculateTangentsOp` ownership map:
+
+| Category | Current owner | Classification | Notes |
+|---|---|---|---|
+| Tangent output storage (`TANGENT` attribute) | mesh data model | unavoidable under current contract | Required output array when tangent attribute is absent. |
+| Accumulator scratch (`tan1 + tan2`) | thread-local/workspace | avoidable internally (already bounded) | Reused scratch; no per-vertex object churn. |
+| Finalization/normalization temporary state | scalar locals | unavoidable + minimal | Primitive locals only. |
+| Pipeline/context helper overhead (`MeshPipeline.run`, varargs, `MeshContext`) | pipeline API | avoidable only with runtime API use | Small constant overhead per call. |
+
+### A3 Runtime Fast-Path Prototype (`MeshPacker`)
+
+Implemented:
+
+- `MeshPacker.RuntimePackWorkspace`
+- `MeshPacker.packInto(mesh, spec, workspace)`
+
+Prototype properties:
+
+- caller-owned reusable vertex/index buffers
+- cached `VertexLayout` per `(spec identity, attribute mask)`
+- direct fused write path into destination buffers
+- primitive submesh metadata captured into reusable workspace arrays
+- avoids `PackedMesh`/`SubmeshRange` materialization on hot path
+
+### A4 Runtime Fast-Path Prototype (`RecalculateTangentsOp`)
+
+Implemented:
+
+- `RecalculateTangentsOp.Workspace`
+- `applyWithWorkspace(mesh, context, workspace)`
+- `applyRuntime(mesh, workspace)` convenience path
+
+Prototype properties:
+
+- bounded reusable scratch controlled by caller
+- same math/output semantics as existing op path
+- no per-vertex object creation; primitive-only inner loops
+
+### A5 Baseline Results (Existing API vs Runtime Prototype)
+
+Representative comparison (`indexed=false`, `avgt`, `B/op = gc.alloc.rate.norm`):
+
+`MeshPacker`:
+
+| Workload | Existing time/op | Runtime time/op | Existing B/op | Runtime B/op | B/op delta |
+|---|---:|---:|---:|---:|---:|
+| SMALL | 0.014 ms | 0.012 ms | 109784.815 | 108176.789 | -1.5% |
+| MEDIUM | 0.188 ms | 0.183 ms | 1602787.517 | 1601179.327 | -0.1% |
+| LARGE | 1.298 ms | 1.118 ms | 9897249.000 | 9895636.431 | -0.02% |
+| ATTRIBUTE_HEAVY | 0.865 ms | 0.718 ms | 6345991.484 | 6344380.500 | -0.03% |
+
+`MeshPacker` batch:
+
+| Workload | Existing batch B/op | Runtime batch B/op | batch B/op delta |
+|---|---:|---:|---:|
+| SMALL | 4314.505 | 2706.408 | -37.3% |
+| MEDIUM | 27647.298 | 26038.164 | -5.8% |
+| LARGE | 157273.813 | 155655.800 | -1.0% |
+| ATTRIBUTE_HEAVY | 101775.850 | 100161.643 | -1.6% |
+
+`RecalculateTangentsOp`:
+
+| Workload | Existing time/op | Runtime time/op | Existing B/op | Runtime B/op | B/op delta |
+|---|---:|---:|---:|---:|---:|
+| SMALL | 0.004 ms | 0.004 ms | 108224.603 | 108144.603 | -0.07% |
+| MEDIUM | 0.055 ms | 0.055 ms | 1601224.433 | 1601144.368 | -0.005% |
+| LARGE | 0.342 ms | 0.342 ms | 9895667.725 | 9895587.720 | -0.001% |
+| ATTRIBUTE_HEAVY | 0.224 ms | 0.226 ms | 6344417.537 | 6344337.531 | -0.001% |
+
+`RecalculateTangentsOp` batch:
+
+| Workload | Existing batch B/op | Runtime batch B/op | batch B/op delta |
+|---|---:|---:|---:|
+| SMALL | 2138.219 | 2058.219 | -3.7% |
+| MEDIUM | 25467.509 | 25387.527 | -0.3% |
+| LARGE | 155074.481 | 154994.481 | -0.05% |
+| ATTRIBUTE_HEAVY | 99583.578 | 99503.578 | -0.08% |
+
+Interpretation:
+
+- `MeshPacker` runtime path removes most remaining API/materialization overhead but confirms the dominant cost is final payload bytes.
+- `RecalculateTangentsOp` was already largely bounded to output/scratch cost; runtime workspace mainly removes small call-surface overhead.
+- Main remaining leverage is API-level runtime destination control and minimizing friendly-path result materialization when high-frequency usage matters.
+
+### Runtime API Decision Points
+
+`MeshPacker`:
+
+- Keep friendly API (`PackedMesh pack(...)`) for tooling and simple callers.
+- Add first-class runtime API (`packInto(..., RuntimePackWorkspace)`) for engine/world construction paths.
+- Treat `PackedMesh` object graph materialization as a convenience-path cost, not the fast-path baseline.
+
+`RecalculateTangentsOp`:
+
+- Keep current `MeshOp` path for pipeline ergonomics.
+- Keep workspace-enabled overload as runtime path when caller controls execution context/scratch reuse.
+- Further gains likely require broader dataflow changes outside tangent math kernel itself.
+
 ## GC Pressure Watchlist
 
 - Do not create temporary vector/wrapper objects in inner loops.

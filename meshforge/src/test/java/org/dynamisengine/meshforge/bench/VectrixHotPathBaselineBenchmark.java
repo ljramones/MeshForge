@@ -2,6 +2,8 @@ package org.dynamisengine.meshforge.bench;
 
 import org.dynamisengine.meshforge.api.Ops;
 import org.dynamisengine.meshforge.core.mesh.MeshData;
+import org.dynamisengine.meshforge.ops.generate.RecalculateTangentsOp;
+import org.dynamisengine.meshforge.ops.pipeline.MeshContext;
 import org.dynamisengine.meshforge.ops.pipeline.MeshPipeline;
 import org.dynamisengine.meshforge.pack.buffer.PackedMesh;
 import org.dynamisengine.meshforge.pack.packer.MeshPacker;
@@ -44,6 +46,10 @@ public class VectrixHotPathBaselineBenchmark {
 
         MeshData template;
         MeshData working;
+        MeshPacker.RuntimePackWorkspace packWorkspace;
+        RecalculateTangentsOp tangentOp;
+        RecalculateTangentsOp.Workspace tangentWorkspace;
+        MeshContext tangentContext;
 
         @Setup(Level.Trial)
         public void trialSetup() {
@@ -52,6 +58,10 @@ public class VectrixHotPathBaselineBenchmark {
                 template.setIndices(null);
                 template.setSubmeshes(List.of());
             }
+            packWorkspace = new MeshPacker.RuntimePackWorkspace();
+            tangentOp = new RecalculateTangentsOp();
+            tangentWorkspace = new RecalculateTangentsOp.Workspace();
+            tangentContext = new MeshContext();
         }
 
         @Setup(Level.Invocation)
@@ -110,6 +120,19 @@ public class VectrixHotPathBaselineBenchmark {
     }
 
     @Benchmark
+    public void meshPackerRealtimeRuntime(MeshState state, Blackhole bh) {
+        MeshPacker.packInto(state.template, PackSpec.realtime(), state.packWorkspace);
+        bh.consume(state.packWorkspace.vertexBytes());
+        bh.consume(state.packWorkspace.indexBytes());
+    }
+
+    @Benchmark
+    public void recalculateTangentsRuntime(MeshState state, Blackhole bh) {
+        MeshData out = state.tangentOp.applyWithWorkspace(state.working, state.tangentContext, state.tangentWorkspace);
+        bh.consume(out.attributeFormats().size());
+    }
+
+    @Benchmark
     public void simdPackOcta(SimdState state, Blackhole bh) {
         SimdNormalPacker.packOctaNormals(state.normals, state.vertexCount, state.packed);
         bh.consume(state.packed[0]);
@@ -136,6 +159,25 @@ public class VectrixHotPathBaselineBenchmark {
         MeshData local = state.template;
         for (int i = 0; i < BATCH_SIZE; i++) {
             local = MeshPipeline.run(local, Ops.tangents());
+            bh.consume(local.vertexCount());
+        }
+    }
+
+    @Benchmark
+    @OperationsPerInvocation(BATCH_SIZE)
+    public void meshPackerRealtimeRuntimeBatch(MeshState state, Blackhole bh) {
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            MeshPacker.packInto(state.template, PackSpec.realtime(), state.packWorkspace);
+            bh.consume(state.packWorkspace.vertexBytes());
+        }
+    }
+
+    @Benchmark
+    @OperationsPerInvocation(BATCH_SIZE)
+    public void recalculateTangentsRuntimeBatch(MeshState state, Blackhole bh) {
+        MeshData local = state.template;
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            local = state.tangentOp.applyWithWorkspace(local, state.tangentContext, state.tangentWorkspace);
             bh.consume(local.vertexCount());
         }
     }

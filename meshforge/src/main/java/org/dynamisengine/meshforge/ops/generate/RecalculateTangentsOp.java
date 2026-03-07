@@ -14,6 +14,22 @@ import java.util.Arrays;
  */
 public final class RecalculateTangentsOp implements MeshOp {
     private static final ThreadLocal<float[]> TAN_SCRATCH = ThreadLocal.withInitial(() -> new float[0]);
+    private static final ThreadLocal<MeshContext> RUNTIME_CONTEXT = ThreadLocal.withInitial(MeshContext::new);
+
+    /**
+     * Reusable workspace for bounded-scratch tangent recomputation paths.
+     */
+    public static final class Workspace {
+        private float[] tanScratch = new float[0];
+
+        private float[] ensureScratch(int minLength) {
+            if (tanScratch.length >= minLength) {
+                return tanScratch;
+            }
+            tanScratch = new float[minLength];
+            return tanScratch;
+        }
+    }
 
     @Override
     /**
@@ -23,6 +39,18 @@ public final class RecalculateTangentsOp implements MeshOp {
      * @return resulting value
      */
     public MeshData apply(MeshData mesh, MeshContext context) {
+        return applyWithWorkspace(mesh, context, null);
+    }
+
+    /**
+     * Runtime-oriented tangent recomputation with caller-managed reusable workspace.
+     *
+     * @param mesh source mesh
+     * @param context mesh context
+     * @param workspace reusable workspace or {@code null} for thread-local fallback
+     * @return processed mesh
+     */
+    public MeshData applyWithWorkspace(MeshData mesh, MeshContext context, Workspace workspace) {
         VertexAttributeView position = require(mesh, AttributeSemantic.POSITION, 0);
         VertexAttributeView normal = require(mesh, AttributeSemantic.NORMAL, 0);
         VertexAttributeView uv = require(mesh, AttributeSemantic.UV, 0);
@@ -50,7 +78,7 @@ public final class RecalculateTangentsOp implements MeshOp {
         int vcount = mesh.vertexCount();
         int tangentScalarCount = Math.multiplyExact(vcount, 3);
         int requiredScratch = Math.multiplyExact(tangentScalarCount, 2);
-        float[] scratch = ensureScratch(requiredScratch);
+        float[] scratch = workspace == null ? ensureScratch(requiredScratch) : workspace.ensureScratch(requiredScratch);
         Arrays.fill(scratch, 0, requiredScratch, 0.0f);
         float[] tan1 = scratch;
         float[] tan2 = scratch;
@@ -119,6 +147,20 @@ public final class RecalculateTangentsOp implements MeshOp {
         }
 
         return mesh;
+    }
+
+    /**
+     * Executes runtime tangent recomputation using a thread-confined context.
+     *
+     * @param mesh source mesh
+     * @param workspace reusable workspace
+     * @return processed mesh
+     */
+    public MeshData applyRuntime(MeshData mesh, Workspace workspace) {
+        if (workspace == null) {
+            throw new NullPointerException("workspace");
+        }
+        return applyWithWorkspace(mesh, RUNTIME_CONTEXT.get(), workspace);
     }
 
     private static void accumulate(

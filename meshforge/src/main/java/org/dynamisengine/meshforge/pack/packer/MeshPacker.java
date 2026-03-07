@@ -38,8 +38,175 @@ public final class MeshPacker {
     private static final AttributeKey JOINTS_0 = new AttributeKey(AttributeSemantic.JOINTS, 0);
     private static final AttributeKey WEIGHTS_0 = new AttributeKey(AttributeSemantic.WEIGHTS, 0);
     private static final ThreadLocal<int[]> NORMAL_PACK_SCRATCH = ThreadLocal.withInitial(() -> new int[0]);
+    private static final int MASK_NORMAL = 1 << 0;
+    private static final int MASK_TANGENT = 1 << 1;
+    private static final int MASK_UV = 1 << 2;
+    private static final int MASK_COLOR = 1 << 3;
+    private static final int MASK_JOINTS = 1 << 4;
+    private static final int MASK_WEIGHTS = 1 << 5;
 
     private MeshPacker() {
+    }
+
+    /**
+     * Reusable destination/scratch for allocation-disciplined runtime pack paths.
+     */
+    public static final class RuntimePackWorkspace {
+        private ByteBuffer vertexBuffer = ByteBuffer.allocateDirect(0).order(ByteOrder.LITTLE_ENDIAN);
+        private ByteBuffer indexBuffer = ByteBuffer.allocateDirect(0).order(ByteOrder.LITTLE_ENDIAN);
+        private PackedMesh.IndexType indexType;
+        private int indexCount;
+        private VertexLayout cachedLayout;
+        private PackSpec cachedSpec;
+        private int cachedLayoutMask = Integer.MIN_VALUE;
+        private int[] submeshFirst = new int[0];
+        private int[] submeshCount = new int[0];
+        private Object[] submeshMaterial = new Object[0];
+        private int submeshSize;
+
+        public ByteBuffer vertexBuffer() {
+            return vertexBuffer;
+        }
+
+        public ByteBuffer indexBufferOrNull() {
+            return indexCount == 0 ? null : indexBuffer;
+        }
+
+        public PackedMesh.IndexType indexTypeOrNull() {
+            return indexType;
+        }
+
+        public int indexCount() {
+            return indexCount;
+        }
+
+        public int vertexBytes() {
+            return vertexBuffer.limit();
+        }
+
+        public int indexBytes() {
+            return indexCount == 0 ? 0 : indexBuffer.limit();
+        }
+
+        public int submeshCount() {
+            return submeshSize;
+        }
+
+        public int submeshFirstIndex(int index) {
+            if (index < 0 || index >= submeshSize) {
+                throw new IndexOutOfBoundsException("submesh index out of range: " + index);
+            }
+            return submeshFirst[index];
+        }
+
+        public int submeshIndexCount(int index) {
+            if (index < 0 || index >= submeshSize) {
+                throw new IndexOutOfBoundsException("submesh index out of range: " + index);
+            }
+            return submeshCount[index];
+        }
+
+        public Object submeshMaterialId(int index) {
+            if (index < 0 || index >= submeshSize) {
+                throw new IndexOutOfBoundsException("submesh index out of range: " + index);
+            }
+            return submeshMaterial[index];
+        }
+
+        private VertexLayout resolveLayout(
+            PackSpec spec,
+            int layoutMask,
+            VertexFormat positionFormat,
+            VertexFormat normalFormat,
+            VertexFormat tangentFormat,
+            VertexFormat uvFormat,
+            VertexFormat colorFormat,
+            VertexFormat jointsFormat,
+            VertexFormat weightsFormat
+        ) {
+            if (cachedLayout != null && cachedSpec == spec && cachedLayoutMask == layoutMask) {
+                return cachedLayout;
+            }
+
+            int offset = 0;
+            LinkedHashMap<AttributeKey, VertexLayout.Entry> entries = new LinkedHashMap<>();
+            offset = add(entries, offset, POSITION_0, positionFormat);
+            if ((layoutMask & MASK_NORMAL) != 0) {
+                offset = add(entries, offset, NORMAL_0, normalFormat);
+            }
+            if ((layoutMask & MASK_TANGENT) != 0) {
+                offset = add(entries, offset, TANGENT_0, tangentFormat);
+            }
+            if ((layoutMask & MASK_UV) != 0) {
+                offset = add(entries, offset, UV_0, uvFormat);
+            }
+            if ((layoutMask & MASK_COLOR) != 0) {
+                offset = add(entries, offset, COLOR_0, colorFormat);
+            }
+            if ((layoutMask & MASK_JOINTS) != 0) {
+                offset = add(entries, offset, JOINTS_0, jointsFormat);
+            }
+            if ((layoutMask & MASK_WEIGHTS) != 0) {
+                offset = add(entries, offset, WEIGHTS_0, weightsFormat);
+            }
+            int stride = align(offset, spec.alignmentBytes());
+            cachedLayout = new VertexLayout(stride, entries);
+            cachedSpec = spec;
+            cachedLayoutMask = layoutMask;
+            return cachedLayout;
+        }
+
+        private ByteBuffer ensureVertexBufferCapacity(int requiredBytes) {
+            if (vertexBuffer.capacity() < requiredBytes) {
+                vertexBuffer = ByteBuffer.allocateDirect(requiredBytes).order(ByteOrder.LITTLE_ENDIAN);
+            }
+            vertexBuffer.clear();
+            vertexBuffer.limit(requiredBytes);
+            return vertexBuffer;
+        }
+
+        private ByteBuffer ensureIndexBufferCapacity(int requiredBytes) {
+            if (indexBuffer.capacity() < requiredBytes) {
+                indexBuffer = ByteBuffer.allocateDirect(requiredBytes).order(ByteOrder.LITTLE_ENDIAN);
+            }
+            indexBuffer.clear();
+            indexBuffer.limit(requiredBytes);
+            return indexBuffer;
+        }
+
+        private void setIndexPayload(PackedMesh.IndexType type, int count, int bytes) {
+            this.indexType = type;
+            this.indexCount = count;
+            indexBuffer.limit(bytes);
+            indexBuffer.position(0);
+        }
+
+        private void clearIndexPayload() {
+            this.indexType = null;
+            this.indexCount = 0;
+            indexBuffer.clear();
+            indexBuffer.limit(0);
+        }
+
+        private void ensureSubmeshCapacity(int required) {
+            if (submeshFirst.length < required) {
+                submeshFirst = new int[required];
+                submeshCount = new int[required];
+                submeshMaterial = new Object[required];
+            }
+        }
+
+        private void setSubmeshes(List<Submesh> source) {
+            int size = source.size();
+            ensureSubmeshCapacity(size);
+            for (int i = 0; i < size; i++) {
+                Submesh submesh = source.get(i);
+                submeshFirst[i] = submesh.firstIndex();
+                submeshCount[i] = submesh.indexCount();
+                submeshMaterial[i] = submesh.materialId();
+            }
+            submeshSize = size;
+        }
     }
 
     /**
@@ -433,6 +600,156 @@ public final class MeshPacker {
         );
     }
 
+    /**
+     * Runtime-oriented path that writes packed payload into caller-owned reusable buffers.
+     * This path avoids per-call output/materialization object churn from {@link #pack(MeshData, PackSpec)}.
+     *
+     * @param mesh source mesh
+     * @param spec pack spec
+     * @param workspace caller-owned reusable workspace/destination
+     */
+    public static void packInto(MeshData mesh, PackSpec spec, RuntimePackWorkspace workspace) {
+        if (workspace == null) {
+            throw new NullPointerException("workspace");
+        }
+        if (spec.layoutMode() != PackSpec.LayoutMode.INTERLEAVED) {
+            throw new UnsupportedOperationException("v1 supports INTERLEAVED only");
+        }
+        if (spec.meshletsEnabled()) {
+            throw new UnsupportedOperationException("packInto currently targets non-meshlet runtime path");
+        }
+
+        VertexAttributeView position = require(mesh, AttributeSemantic.POSITION, 0);
+        VertexAttributeView normal = optional(mesh, AttributeSemantic.NORMAL, 0);
+        VertexAttributeView tangent = optional(mesh, AttributeSemantic.TANGENT, 0);
+        VertexAttributeView uv0 = optional(mesh, AttributeSemantic.UV, 0);
+        VertexAttributeView color0 = optional(mesh, AttributeSemantic.COLOR, 0);
+        VertexAttributeView joints0 = optional(mesh, AttributeSemantic.JOINTS, 0);
+        VertexAttributeView weights0 = optional(mesh, AttributeSemantic.WEIGHTS, 0);
+
+        if (spec.failIfMissingNormals() && normal == null) {
+            throw new IllegalStateException("Missing NORMAL[0] but PackSpec requires it");
+        }
+        if (spec.failIfMissingTangents() && tangent == null) {
+            throw new IllegalStateException("Missing TANGENT[0] but PackSpec requires it");
+        }
+
+        int layoutMask = 0;
+        if (normal != null) {
+            layoutMask |= MASK_NORMAL;
+        }
+        if (tangent != null) {
+            layoutMask |= MASK_TANGENT;
+        }
+        if (uv0 != null) {
+            layoutMask |= MASK_UV;
+        }
+        if (color0 != null) {
+            layoutMask |= MASK_COLOR;
+        }
+        if (joints0 != null) {
+            layoutMask |= MASK_JOINTS;
+        }
+        if (weights0 != null) {
+            layoutMask |= MASK_WEIGHTS;
+        }
+
+        VertexFormat positionFormat = spec.targetFormat(POSITION_0);
+        if (positionFormat == null) {
+            throw new IllegalStateException("PackSpec must include target format for POSITION[0]");
+        }
+        VertexLayout layout = workspace.resolveLayout(
+            spec,
+            layoutMask,
+            positionFormat,
+            spec.targetFormat(NORMAL_0),
+            spec.targetFormat(TANGENT_0),
+            spec.targetFormat(UV_0),
+            spec.targetFormat(COLOR_0),
+            spec.targetFormat(JOINTS_0),
+            spec.targetFormat(WEIGHTS_0)
+        );
+
+        int vertexCount = mesh.vertexCount();
+        int stride = layout.strideBytes();
+        final ByteBuffer vertexBuffer;
+        try {
+            vertexBuffer = workspace.ensureVertexBufferCapacity(Math.multiplyExact(vertexCount, stride));
+        } catch (ArithmeticException ex) {
+            throw new IllegalStateException(
+                "Vertex buffer size overflow: vertexCount=" + vertexCount + ", stride=" + stride, ex);
+        }
+
+        float[] positionData = requireFloat(position, "POSITION");
+        float[] normalData = normal == null ? null : normal.rawFloatArrayOrNull();
+        float[] tangentData = tangent == null ? null : tangent.rawFloatArrayOrNull();
+        float[] uvData = uv0 == null ? null : uv0.rawFloatArrayOrNull();
+        float[] colorData = color0 == null ? null : color0.rawFloatArrayOrNull();
+        int[] jointsData = joints0 == null ? null : joints0.rawIntArrayOrNull();
+        float[] weightsData = weights0 == null ? null : weights0.rawFloatArrayOrNull();
+
+        VertexLayout.Entry posEntry = layout.entry(POSITION_0);
+        VertexLayout.Entry normalEntry = layout.entry(NORMAL_0);
+        VertexLayout.Entry tangentEntry = layout.entry(TANGENT_0);
+        VertexLayout.Entry uvEntry = layout.entry(UV_0);
+        VertexLayout.Entry colorEntry = layout.entry(COLOR_0);
+        VertexLayout.Entry jointsEntry = layout.entry(JOINTS_0);
+        VertexLayout.Entry weightsEntry = layout.entry(WEIGHTS_0);
+
+        int posOff = posEntry == null ? -1 : posEntry.offsetBytes();
+        int normalOff = normalEntry == null ? -1 : normalEntry.offsetBytes();
+        int tangentOff = tangentEntry == null ? -1 : tangentEntry.offsetBytes();
+        int uvOff = uvEntry == null ? -1 : uvEntry.offsetBytes();
+        int colorOff = colorEntry == null ? -1 : colorEntry.offsetBytes();
+        int jointsOff = jointsEntry == null ? -1 : jointsEntry.offsetBytes();
+        int weightsOff = weightsEntry == null ? -1 : weightsEntry.offsetBytes();
+
+        boolean hasNormal = normalData != null && normalOff >= 0;
+        boolean hasTangent = tangentData != null && tangentOff >= 0;
+        boolean hasUv = uvData != null && uvOff >= 0;
+        boolean hasColor = colorData != null && colorOff >= 0;
+        boolean hasJoints = joints0 != null && jointsOff >= 0;
+        boolean hasWeights = weightsData != null && weightsOff >= 0;
+        VertexFormat normalFormat = normalEntry == null ? null : normalEntry.format();
+
+        writeFusedPass(
+            vertexBuffer,
+            vertexCount,
+            stride,
+            positionData,
+            posOff,
+            normalData,
+            hasNormal,
+            normalOff,
+            normalFormat,
+            tangentData,
+            hasTangent,
+            tangentOff,
+            uvData,
+            hasUv,
+            uvOff,
+            colorData,
+            hasColor,
+            colorOff,
+            jointsData,
+            joints0,
+            hasJoints,
+            jointsOff,
+            weightsData,
+            hasWeights,
+            weightsOff
+        );
+
+        int[] indices = mesh.indicesOrNull();
+        if (indices == null || indices.length == 0) {
+            workspace.clearIndexPayload();
+        } else {
+            packIndicesInto(indices, spec.indexPolicy(), workspace);
+        }
+
+        workspace.setSubmeshes(mesh.submeshes());
+    }
+
     private static int add(
         LinkedHashMap<AttributeKey, VertexLayout.Entry> entries,
         int offset,
@@ -696,6 +1013,52 @@ public final class MeshPacker {
         }
         data.flip();
         return new PackedMesh.IndexBufferView(PackedMesh.IndexType.UINT32, data, indices.length);
+    }
+
+    private static void packIndicesInto(int[] indices, PackSpec.IndexPolicy policy, RuntimePackWorkspace workspace) {
+        if (indices.length == Integer.MAX_VALUE) {
+            throw new IllegalStateException("indexCount exceeds supported limit: " + indices.length);
+        }
+        boolean canUse16 = true;
+        for (int value : indices) {
+            if (value < 0) {
+                throw new IllegalStateException("Index buffer contains negative index: " + value);
+            }
+            if ((value & 0xFFFF0000) != 0) {
+                canUse16 = false;
+                break;
+            }
+        }
+        if (policy == PackSpec.IndexPolicy.FORCE_32) {
+            canUse16 = false;
+        }
+
+        if (canUse16) {
+            final ByteBuffer data;
+            try {
+                data = workspace.ensureIndexBufferCapacity(Math.multiplyExact(indices.length, 2));
+            } catch (ArithmeticException ex) {
+                throw new IllegalStateException("Index buffer size overflow for UINT16 with indexCount=" + indices.length, ex);
+            }
+            data.position(0);
+            for (int value : indices) {
+                data.putShort((short) value);
+            }
+            workspace.setIndexPayload(PackedMesh.IndexType.UINT16, indices.length, data.position());
+            return;
+        }
+
+        final ByteBuffer data;
+        try {
+            data = workspace.ensureIndexBufferCapacity(Math.multiplyExact(indices.length, 4));
+        } catch (ArithmeticException ex) {
+            throw new IllegalStateException("Index buffer size overflow for UINT32 with indexCount=" + indices.length, ex);
+        }
+        data.position(0);
+        for (int value : indices) {
+            data.putInt(value);
+        }
+        workspace.setIndexPayload(PackedMesh.IndexType.UINT32, indices.length, data.position());
     }
 
     private static int packSnorm8x4Inline(float x, float y, float z, float w) {
