@@ -70,11 +70,13 @@ public class VectrixHotPathBaselineBenchmark {
     public static class PackState extends BaseMeshState {
         MeshPacker.RuntimePackWorkspace packWorkspace;
         MeshPacker.RuntimePackWorkspacePool packWorkspacePool;
+        MeshPacker.RuntimePackPlan runtimePlan;
 
         @Setup(Level.Trial)
         public void setupPackTrial() {
             packWorkspace = new MeshPacker.RuntimePackWorkspace();
             packWorkspacePool = new MeshPacker.RuntimePackWorkspacePool(8);
+            runtimePlan = MeshPacker.buildRuntimePlan(template, PackSpec.realtime());
         }
     }
 
@@ -163,6 +165,13 @@ public class VectrixHotPathBaselineBenchmark {
     }
 
     @Benchmark
+    public void meshPackerRealtimeRuntimePlanned(PackState state, Blackhole bh) {
+        MeshPacker.packPlannedInto(state.runtimePlan, state.packWorkspace);
+        bh.consume(state.packWorkspace.vertexBytes());
+        bh.consume(state.packWorkspace.indexBytes());
+    }
+
+    @Benchmark
     public void recalculateTangentsRuntime(TangentState state, Blackhole bh) {
         MeshData out = state.tangentOp.applyWithWorkspace(state.working, state.tangentContext, state.tangentWorkspace);
         bh.consume(out.attributeFormats().size());
@@ -228,6 +237,15 @@ public class VectrixHotPathBaselineBenchmark {
             } finally {
                 state.packWorkspacePool.release(workspace);
             }
+        }
+    }
+
+    @Benchmark
+    @OperationsPerInvocation(BATCH_SIZE)
+    public void meshPackerRealtimeRuntimePlannedBatch(PackState state, Blackhole bh) {
+        for (int i = 0; i < BATCH_SIZE; i++) {
+            MeshPacker.packPlannedInto(state.runtimePlan, state.packWorkspace);
+            bh.consume(state.packWorkspace.vertexBytes());
         }
     }
 

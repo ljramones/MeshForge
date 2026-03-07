@@ -716,6 +716,48 @@ Interpretation:
 - Runtime vs friendly split remains strong (~4x lower allocation in packer runtime path on corrected runs).
 - Pool wrapper still provides no additional reduction beyond direct runtime workspace reuse.
 
+## D1 Planned Runtime API (No-View Path) (2026-03-07)
+
+Source: `/tmp/mf_d1_planned_jmh.txt`
+
+Added:
+
+- `MeshPacker.RuntimePackPlan`
+- `MeshPacker.buildRuntimePlan(mesh, spec)`
+- `MeshPacker.packPlannedInto(plan, workspace)`
+- `MeshPacker.packVertexPayloadInto(plan, workspace)`
+- `MeshPacker.packIndexPayloadInto(plan, workspace)`
+- `MeshPacker.captureSubmeshMetadata(plan, workspace)`
+
+Benchmark lanes:
+
+- `meshPackerRealtimeRuntime` (current runtime path)
+- `meshPackerRealtimeRuntimePlanned` (preplanned no-view path)
+
+`indexed=false` (`avgt`, `B/op`):
+
+| Workload | Runtime `packInto` | Planned `packPlannedInto` | alloc delta |
+|---|---:|---:|---:|
+| SMALL | 504.275 | 0.267 | -99.95% |
+| MEDIUM | 508.049 | 4.051 | -99.20% |
+| LARGE | 529.008 | 24.740 | -95.32% |
+| ATTRIBUTE_HEAVY | 519.965 | 15.982 | -96.93% |
+
+`indexed=false` time/op (`avgt`, ms):
+
+| Workload | Runtime `packInto` | Planned `packPlannedInto` |
+|---|---:|---:|
+| SMALL | 0.012 | 0.012 |
+| MEDIUM | 0.178 | 0.178 |
+| LARGE | 1.100 | 1.087 |
+| ATTRIBUTE_HEAVY | 0.702 | 0.702 |
+
+Interpretation:
+
+- Precomputed no-view runtime plan removes almost all residual per-call overhead allocation.
+- Throughput/time remains effectively unchanged or slightly better.
+- This validates planned runtime mode as the lowest-overhead engine contract for repeated packing of stable mesh/spec shapes.
+
 ## GC Pressure Watchlist
 
 - Do not create temporary vector/wrapper objects in inner loops.
