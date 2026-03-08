@@ -29,3 +29,4 @@ replay_pid*
 /org.meshforge.bench.OptimizeVertexCacheBenchmark.optimizeAndMeasureAcmr-AverageTime/profile.jfr
 *.jfr
 perf/results/
+perf/cache/
