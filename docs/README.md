@@ -6,6 +6,7 @@ Last updated: 2026-02-23
 
 - `API.md` - top-level public API reference
 - `TECHNOLOGY_EXPLAINER.md` - architecture rationale and integration guide
+- `docs/meshforge-v1-architecture.md` - v1 runtime geometry subsystem summary and canonical contracts
 - `docs/api.md` - current API shape and usage flow
 - `docs/meshforge-architecture.md` - authoring/runtime model split and boundaries
 - `docs/internal-storage.md` - internal data representation

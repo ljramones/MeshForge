@@ -596,6 +596,12 @@ Canonical runtime geometry engine flow:
 docs/runtime-geometry-flow.md
 ```
 
+MeshForge v1 architecture summary:
+
+```text
+docs/meshforge-v1-architecture.md
+```
+
 ## Next Phase
 
 The next phase is no longer about squeezing MeshForge packing or runtime pipeline internals. Those paths are now in strong shape. The next work should focus on integration and productionization.
