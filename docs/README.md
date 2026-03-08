@@ -11,6 +11,7 @@ Last updated: 2026-02-23
 - `docs/internal-storage.md` - internal data representation
 - `docs/boundaries.md` - cross-library boundary rules
 - `docs/adr/0001-library-boundaries.md` - accepted boundary ADR
+- `docs/adr/0002-runtime-geometry-layout.md` - accepted runtime layout ADR
 
 ## Performance
 

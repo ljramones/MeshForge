@@ -154,6 +154,12 @@ Cross-library ownership boundaries (Vectrix, MeshForge, DynamisLightEngine) are 
 docs/adr/0001-library-boundaries.md
 ```
 
+Runtime geometry layout strategy is defined in:
+
+```
+docs/adr/0002-runtime-geometry-layout.md
+```
+
 Detailed integration rules and enforcement notes are in:
 
 ```
