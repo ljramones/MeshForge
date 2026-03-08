@@ -528,6 +528,48 @@ The preferred cold-load runtime path is:
 runtime geometry cache -> RuntimeGeometryPayload -> GpuGeometryUploadPlan
 ```
 
+### Runtime Geometry Pipeline
+
+Slow path (source import):
+
+```text
+OBJ/GLTF
+   ->
+MeshLoaders
+   ->
+Pipelines.realtimeFast
+   ->
+MeshPacker
+   ->
+RuntimeGeometryPayload
+   ->
+meshforge-dynamisgpu
+   ->
+GpuGeometryUploadPlan
+   ->
+DynamisGPU
+```
+
+Fast path (cache):
+
+```text
+Runtime geometry cache
+   ->
+RuntimeGeometryPayload
+   ->
+meshforge-dynamisgpu
+   ->
+GpuGeometryUploadPlan
+   ->
+DynamisGPU
+```
+
+Regression guardrail snapshot:
+
+```text
+docs/runtime-geometry-regression-baseline.md
+```
+
 ## Next Phase
 
 The next phase is no longer about squeezing MeshForge packing or runtime pipeline internals. Those paths are now in strong shape. The next work should focus on integration and productionization.

@@ -26,6 +26,10 @@ import java.util.List;
 public final class RuntimeGeometryCacheIO {
     private static final int MAGIC = 0x4D464743; // MFGC
     private static final int VERSION = 1;
+    private static final byte ENDIAN_LITTLE = 1;
+    private static final int SUPPORTED_FLAGS = 0x3;
+    private static final int FLAG_INDEXED = 1 << 0;
+    private static final int FLAG_HAS_MATERIAL_IDS = 1 << 1;
 
     private RuntimeGeometryCacheIO() {
     }
@@ -39,8 +43,14 @@ public final class RuntimeGeometryCacheIO {
         }
         Files.createDirectories(path.toAbsolutePath().getParent());
         try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(path)))) {
+            int flags = computeFlags(payload);
+            long layoutHash = computeLayoutHash(payload.layout());
+
             out.writeInt(MAGIC);
             out.writeInt(VERSION);
+            out.writeByte(ENDIAN_LITTLE);
+            out.writeInt(flags);
+            out.writeLong(layoutHash);
             out.writeInt(payload.vertexCount());
             out.writeInt(payload.indexCount());
             out.writeInt(payload.indexType() == null ? -1 : payload.indexType().ordinal());
@@ -89,6 +99,15 @@ public final class RuntimeGeometryCacheIO {
             if (version != VERSION) {
                 throw new IOException("Unsupported cache version: " + version);
             }
+            int endianness = in.readUnsignedByte();
+            if (endianness != ENDIAN_LITTLE) {
+                throw new IOException("Unsupported cache endianness flag: " + endianness);
+            }
+            int flags = in.readInt();
+            if ((flags & ~SUPPORTED_FLAGS) != 0) {
+                throw new IOException("Unsupported cache flags: 0x" + Integer.toHexString(flags));
+            }
+            long layoutHash = in.readLong();
 
             int vertexCount = in.readInt();
             int indexCount = in.readInt();
@@ -134,6 +153,20 @@ public final class RuntimeGeometryCacheIO {
                 ? null
                 : ByteBuffer.wrap(indexBytesRaw).order(ByteOrder.LITTLE_ENDIAN).asReadOnlyBuffer();
             VertexLayout layout = new VertexLayout(stride, entries);
+            long computedLayoutHash = computeLayoutHash(layout);
+            if (layoutHash != computedLayoutHash) {
+                throw new IOException("Cache layout hash mismatch");
+            }
+            int computedFlags = 0;
+            if (indexType != null && indexCount > 0) {
+                computedFlags |= FLAG_INDEXED;
+            }
+            if (hasMaterialIds(submeshes)) {
+                computedFlags |= FLAG_HAS_MATERIAL_IDS;
+            }
+            if ((flags & SUPPORTED_FLAGS) != computedFlags) {
+                throw new IOException("Cache flags do not match payload");
+            }
 
             return new RuntimeGeometryPayload(
                 layout,
@@ -153,5 +186,44 @@ public final class RuntimeGeometryCacheIO {
         byte[] bytes = new byte[copy.remaining()];
         copy.get(bytes);
         return bytes;
+    }
+
+    private static int computeFlags(RuntimeGeometryPayload payload) {
+        int flags = 0;
+        if (payload.indexType() != null && payload.indexCount() > 0 && payload.indexBytes() != null) {
+            flags |= FLAG_INDEXED;
+        }
+        if (hasMaterialIds(payload.submeshes())) {
+            flags |= FLAG_HAS_MATERIAL_IDS;
+        }
+        return flags;
+    }
+
+    private static boolean hasMaterialIds(List<PackedMesh.SubmeshRange> submeshes) {
+        for (PackedMesh.SubmeshRange submesh : submeshes) {
+            if (submesh.materialId() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static long computeLayoutHash(VertexLayout layout) {
+        long hash = 1469598103934665603L; // FNV-1a 64-bit offset basis
+        hash = fnvMix(hash, layout.strideBytes());
+        for (VertexLayout.Entry entry : layout.entries().values()) {
+            hash = fnvMix(hash, entry.key().semantic().ordinal());
+            hash = fnvMix(hash, entry.key().setIndex());
+            hash = fnvMix(hash, entry.format().ordinal());
+            hash = fnvMix(hash, entry.offsetBytes());
+        }
+        return hash;
+    }
+
+    private static long fnvMix(long hash, int value) {
+        long v = value & 0xffffffffL;
+        hash ^= v;
+        hash *= 1099511628211L;
+        return hash;
     }
 }

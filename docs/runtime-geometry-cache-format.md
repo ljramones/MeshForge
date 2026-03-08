@@ -36,6 +36,9 @@ Header:
 
 - `magic` (`MFGC`, 4 bytes)
 - `version` (`uint32`, currently `1`)
+- `endianness` (`uint8`, currently `1` = little-endian)
+- `flags` (`uint32`)
+- `layoutHash` (`uint64`, FNV-1a over stride + layout entries)
 
 Core:
 
@@ -74,6 +77,28 @@ Submeshes:
 - Strict magic + version check on read.
 - Any incompatible layout change increments version.
 - Reader should fail fast for unknown versions.
+
+## Validation and Invalidation Rules
+
+Cache read rejects and rebuilds on:
+
+- magic mismatch
+- version mismatch
+- unsupported endianness
+- unsupported flags
+- layout hash mismatch (corruption/layout drift)
+- payload truncation/corruption
+
+Lifecycle policy (current prototype):
+
+```text
+if cache exists and validates:
+    load cache
+else:
+    import source mesh
+    run realtime prep + planned pack
+    write cache
+```
 
 ## Next-step extensions
 
