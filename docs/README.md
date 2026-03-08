@@ -33,3 +33,6 @@ Last updated: 2026-02-23
 - `docs/roadmap.md` - active and next priorities
 - `docs/plan-v1.md` - historical v1 completion snapshot
 - `docs/release-notes-v1.0.0.md` - v1 release notes
+- `docs/v2-clustered-runtime-contract.md` - v2 clustered runtime contract draft
+- `docs/v2-clustered-cache-strategy.md` - v2 clustered cache strategy draft
+- `docs/v2-lod-chunking-outline.md` - v2 LOD/chunking phased outline
