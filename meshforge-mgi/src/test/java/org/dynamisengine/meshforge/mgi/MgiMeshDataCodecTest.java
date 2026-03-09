@@ -148,6 +148,7 @@ class MgiMeshDataCodecTest {
                 List.of(new MgiMeshletBounds(0f, 0f, 0f, 1f, 1f, 1f))
             ),
             null,
+            null,
             new int[] {0, 1, 2, 0, 2, 3},
             List.of(new MgiSubmeshRange(0, 6, 0))
         );
@@ -193,6 +194,7 @@ class MgiMeshDataCodecTest {
                 new int[] {0, 1, 2, 0, 2, 3},
                 List.of(new MgiMeshletBounds(0f, 0f, 0f, 1f, 1f, 1f))
             ),
+            null,
             null,
             new int[] {0, 1, 2, 0, 2, 3},
             List.of(new MgiSubmeshRange(0, 6, 0))

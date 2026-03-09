@@ -12,6 +12,8 @@ import org.dynamisengine.meshforge.core.mesh.Submesh;
 import org.dynamisengine.meshforge.core.topology.Topology;
 import org.dynamisengine.meshforge.ops.lod.MeshletLodLevelMetadata;
 import org.dynamisengine.meshforge.ops.lod.MeshletLodMetadata;
+import org.dynamisengine.meshforge.ops.streaming.MeshletStreamUnitMetadata;
+import org.dynamisengine.meshforge.ops.streaming.MeshletStreamingMetadata;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,6 +35,7 @@ public final class MgiMeshDataCodec {
      * @param metadataPresent whether canonical metadata was present
      * @param meshletDataOrNull optional decoded meshlet metadata payload
      * @param meshletLodDataOrNull optional decoded meshlet LOD metadata payload
+     * @param meshletStreamingDataOrNull optional decoded meshlet streaming metadata payload
      */
     public record RuntimeDecodeResult(
         MeshData meshData,
@@ -41,7 +44,8 @@ public final class MgiMeshDataCodec {
         boolean hasPrebakedBounds,
         boolean metadataPresent,
         MgiMeshletData meshletDataOrNull,
-        MgiMeshletLodData meshletLodDataOrNull
+        MgiMeshletLodData meshletLodDataOrNull,
+        MgiMeshletStreamingData meshletStreamingDataOrNull
     ) {
         public RuntimeDecodeResult {
             if (meshData == null) {
@@ -76,6 +80,27 @@ public final class MgiMeshDataCodec {
             }
             return new MeshletLodMetadata(levels);
         }
+
+        public int meshletStreamingUnitCount() {
+            return meshletStreamingDataOrNull == null ? 0 : meshletStreamingDataOrNull.units().size();
+        }
+
+        public MeshletStreamingMetadata meshletStreamingMetadataOrNull() {
+            if (meshletStreamingDataOrNull == null) {
+                return null;
+            }
+            ArrayList<MeshletStreamUnitMetadata> units = new ArrayList<>(meshletStreamingDataOrNull.units().size());
+            for (MgiMeshletStreamUnit unit : meshletStreamingDataOrNull.units()) {
+                units.add(new MeshletStreamUnitMetadata(
+                    unit.streamUnitId(),
+                    unit.meshletStart(),
+                    unit.meshletCount(),
+                    unit.payloadByteOffset(),
+                    unit.payloadByteSize()
+                ));
+            }
+            return new MeshletStreamingMetadata(units);
+        }
     }
 
     private final MgiStaticMeshCodec staticMeshCodec = new MgiStaticMeshCodec();
@@ -100,6 +125,7 @@ public final class MgiMeshDataCodec {
         MgiCanonicalMetadata metadata = staticMesh.canonicalMetadataOrNull();
         MgiMeshletData meshletData = staticMesh.meshletDataOrNull();
         MgiMeshletLodData meshletLodData = staticMesh.meshletLodDataOrNull();
+        MgiMeshletStreamingData meshletStreamingData = staticMesh.meshletStreamingDataOrNull();
         return new RuntimeDecodeResult(
             meshData,
             metadata != null && metadata.trustedCanonical(),
@@ -107,7 +133,8 @@ public final class MgiMeshDataCodec {
             staticMesh.boundsOrNull() != null,
             metadata != null,
             meshletData,
-            meshletLodData
+            meshletLodData,
+            meshletStreamingData
         );
     }
 
@@ -145,7 +172,7 @@ public final class MgiMeshDataCodec {
         List<MgiSubmeshRange> ranges = convertSubmeshes(meshData.submeshes(), indices.length);
         MgiAabb bounds = toMgiAabb(meshData);
         MgiCanonicalMetadata metadata = canonicalMetadata(meshData, packedPositions);
-        return new MgiStaticMesh(packedPositions, packedNormals, packedUv0, bounds, metadata, null, null, indices, ranges);
+        return new MgiStaticMesh(packedPositions, packedNormals, packedUv0, bounds, metadata, null, null, null, indices, ranges);
     }
 
     public static MeshData toMeshData(MgiStaticMesh mesh) {

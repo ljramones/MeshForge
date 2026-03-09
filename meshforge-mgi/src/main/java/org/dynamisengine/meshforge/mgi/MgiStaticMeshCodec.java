@@ -20,6 +20,7 @@ public final class MgiStaticMeshCodec {
     private static final int MESHLET_DESCRIPTOR_INTS = 8;
     private static final int MESHLET_BOUNDS_FLOATS = 6;
     private static final int MESHLET_LOD_LEVEL_BYTES = (3 * Integer.BYTES) + Float.BYTES;
+    private static final int MESHLET_STREAM_UNIT_INTS = 5;
 
     private static final int SEM_POSITION = 1;
     private static final int SEM_NORMAL = 2;
@@ -57,6 +58,9 @@ public final class MgiStaticMeshCodec {
         byte[] meshletLodLevelBytes = mesh.meshletLodDataOrNull() == null
             ? null
             : encodeMeshletLodLevels(mesh.meshletLodDataOrNull().levels());
+        byte[] meshletStreamUnitBytes = mesh.meshletStreamingDataOrNull() == null
+            ? null
+            : encodeMeshletStreamUnits(mesh.meshletStreamingDataOrNull().units());
 
         long directoryOffset = MgiConstants.HEADER_SIZE_BYTES;
         int chunkCount = 5;
@@ -70,6 +74,9 @@ public final class MgiStaticMeshCodec {
             chunkCount += 4;
         }
         if (meshletLodLevelBytes != null) {
+            chunkCount++;
+        }
+        if (meshletStreamUnitBytes != null) {
             chunkCount++;
         }
         long payloadOffset = directoryOffset + ((long) chunkCount * MgiConstants.CHUNK_ENTRY_SIZE_BYTES);
@@ -155,6 +162,17 @@ public final class MgiStaticMeshCodec {
             entries.add(meshletLodLevels);
             payloadOffset = meshletLodLevels.endExclusive();
         }
+        MgiChunkEntry meshletStreamUnits = null;
+        if (meshletStreamUnitBytes != null) {
+            meshletStreamUnits = new MgiChunkEntry(
+                MgiChunkType.MESHLET_STREAM_UNITS.id(),
+                payloadOffset,
+                meshletStreamUnitBytes.length,
+                0
+            );
+            entries.add(meshletStreamUnits);
+            payloadOffset = meshletStreamUnits.endExclusive();
+        }
         MgiHeader header = MgiHeader.v1(entries.size(), directoryOffset, 1);
         long fileSize = payloadOffset;
         MgiValidator.validate(header, List.copyOf(entries), fileSize);
@@ -182,6 +200,9 @@ public final class MgiStaticMeshCodec {
         }
         if (meshletLodLevelBytes != null) {
             out.write(meshletLodLevelBytes);
+        }
+        if (meshletStreamUnitBytes != null) {
+            out.write(meshletStreamUnitBytes);
         }
         return out.toByteArray();
     }
@@ -214,6 +235,7 @@ public final class MgiStaticMeshCodec {
         MgiChunkEntry meshletTriangleEntry = byType.get(MgiChunkType.MESHLET_TRIANGLES);
         MgiChunkEntry meshletBoundsEntry = byType.get(MgiChunkType.MESHLET_BOUNDS);
         MgiChunkEntry meshletLodEntry = byType.get(MgiChunkType.MESHLET_LOD_LEVELS);
+        MgiChunkEntry meshletStreamEntry = byType.get(MgiChunkType.MESHLET_STREAM_UNITS);
 
         int[] meshTable = decodeIntPayload(bytes, meshTableEntry, MESH_TABLE_ENTRY_INTS);
         int vertexCount = meshTable[0];
@@ -243,6 +265,7 @@ public final class MgiStaticMeshCodec {
             submeshCount
         );
         MgiMeshletLodData meshletLodData = decodeMeshletLodLevels(bytes, meshletLodEntry);
+        MgiMeshletStreamingData meshletStreamingData = decodeMeshletStreamUnits(bytes, meshletStreamEntry);
 
         MgiStaticMesh mesh = new MgiStaticMesh(
             streams.positions,
@@ -252,6 +275,7 @@ public final class MgiStaticMeshCodec {
             metadata,
             meshletData,
             meshletLodData,
+            meshletStreamingData,
             indices,
             List.of(ranges)
         );
@@ -384,6 +408,19 @@ public final class MgiStaticMeshCodec {
             b.putInt(level.meshletStart());
             b.putInt(level.meshletCount());
             b.putFloat(level.geometricError());
+        }
+        return b.array();
+    }
+
+    private static byte[] encodeMeshletStreamUnits(List<MgiMeshletStreamUnit> units) {
+        ByteBuffer b = ByteBuffer.allocate(units.size() * MESHLET_STREAM_UNIT_INTS * Integer.BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN);
+        for (MgiMeshletStreamUnit unit : units) {
+            b.putInt(unit.streamUnitId());
+            b.putInt(unit.meshletStart());
+            b.putInt(unit.meshletCount());
+            b.putInt(unit.payloadByteOffset());
+            b.putInt(unit.payloadByteSize());
         }
         return b.array();
     }
@@ -655,6 +692,29 @@ public final class MgiStaticMeshCodec {
         return new MgiMeshletLodData(levels);
     }
 
+    private static MgiMeshletStreamingData decodeMeshletStreamUnits(byte[] bytes, MgiChunkEntry entry) {
+        if (entry == null) {
+            return null;
+        }
+        int[] unitInts = decodeIntPayloadMultiple(bytes, entry, MESHLET_STREAM_UNIT_INTS);
+        int unitCount = unitInts.length / MESHLET_STREAM_UNIT_INTS;
+        if (unitCount == 0) {
+            throw new MgiValidationException("meshlet stream unit payload must not be empty");
+        }
+        ArrayList<MgiMeshletStreamUnit> units = new ArrayList<>(unitCount);
+        for (int i = 0; i < unitCount; i++) {
+            int base = i * MESHLET_STREAM_UNIT_INTS;
+            units.add(new MgiMeshletStreamUnit(
+                unitInts[base],
+                unitInts[base + 1],
+                unitInts[base + 2],
+                unitInts[base + 3],
+                unitInts[base + 4]
+            ));
+        }
+        return new MgiMeshletStreamingData(units);
+    }
+
     private static MgiChunkEntry required(Map<MgiChunkType, MgiChunkEntry> map, MgiChunkType type) {
         MgiChunkEntry entry = map.get(type);
         if (entry == null) {
@@ -707,6 +767,18 @@ public final class MgiStaticMeshCodec {
                 long end = (long) level.meshletStart() + level.meshletCount();
                 if (end > descriptorCount) {
                     throw new MgiValidationException("meshlet LOD level range exceeds descriptor count");
+                }
+            }
+        }
+        if (mesh.meshletStreamingDataOrNull() != null) {
+            if (mesh.meshletDataOrNull() == null) {
+                throw new MgiValidationException("meshlet streaming metadata requires meshlet descriptors");
+            }
+            int descriptorCount = mesh.meshletDataOrNull().descriptors().size();
+            for (MgiMeshletStreamUnit unit : mesh.meshletStreamingDataOrNull().units()) {
+                long end = (long) unit.meshletStart() + unit.meshletCount();
+                if (end > descriptorCount) {
+                    throw new MgiValidationException("meshlet streaming unit range exceeds descriptor count");
                 }
             }
         }

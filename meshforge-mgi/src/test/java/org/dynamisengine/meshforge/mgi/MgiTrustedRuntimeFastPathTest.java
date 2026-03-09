@@ -56,6 +56,7 @@ class MgiTrustedRuntimeFastPathTest {
             null,
             null,
             null,
+            null,
             new int[] {0, 1, 2},
             List.of(new MgiSubmeshRange(0, 3, 0))
         );
@@ -91,6 +92,7 @@ class MgiTrustedRuntimeFastPathTest {
                 3,
                 MgiCanonicalMetadata.FLAG_DEGENERATE_FREE | MgiCanonicalMetadata.FLAG_TRUSTED_CANONICAL
             ),
+            null,
             null,
             null,
             new int[] {0, 1, 2},

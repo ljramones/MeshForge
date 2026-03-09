@@ -1,20 +1,18 @@
 package org.dynamisengine.meshforge.mgi;
 
-import org.dynamisengine.meshforge.ops.lod.MeshletLodMetadata;
+import org.dynamisengine.meshforge.ops.streaming.MeshletStreamingMetadata;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class MgiMeshletLodRuntimeDecodeTest {
+class MgiMeshletStreamingRuntimeDecodeTest {
 
     @Test
-    void runtimeDecodeExposesLodMetadataWhenPresent() throws Exception {
+    void runtimeDecodeExposesStreamingMetadataWhenPresent() throws Exception {
         MgiStaticMesh staticMesh = new MgiStaticMesh(
             new float[] {
                 0f, 0f, 0f,
@@ -32,8 +30,8 @@ class MgiMeshletLodRuntimeDecodeTest {
                 new int[] {0, 1, 2, 0, 2, 3},
                 List.of(new MgiMeshletBounds(0f, 0f, 0f, 1f, 1f, 1f))
             ),
-            new MgiMeshletLodData(List.of(new MgiMeshletLodLevel(0, 0, 1, 0.0f))),
             null,
+            new MgiMeshletStreamingData(List.of(new MgiMeshletStreamUnit(0, 0, 1, 0, 512))),
             new int[] {0, 1, 2, 0, 2, 3},
             List.of(new MgiSubmeshRange(0, 6, 0))
         );
@@ -42,25 +40,24 @@ class MgiMeshletLodRuntimeDecodeTest {
         byte[] bytes = new MgiStaticMeshCodec().write(staticMesh);
         MgiMeshDataCodec.RuntimeDecodeResult decoded = codec.readForRuntime(bytes);
 
-        assertEquals(1, decoded.meshletLodLevelCount());
-        assertNotNull(decoded.meshletLodDataOrNull());
+        assertEquals(1, decoded.meshletStreamingUnitCount());
+        assertNotNull(decoded.meshletStreamingDataOrNull());
 
-        MeshletLodMetadata handoff = decoded.meshletLodMetadataOrNull();
+        MeshletStreamingMetadata handoff = decoded.meshletStreamingMetadataOrNull();
         assertNotNull(handoff);
-        assertEquals(1, handoff.levelCount());
-        assertEquals(0, handoff.levels().getFirst().lodLevel());
-        assertEquals(1, handoff.levels().getFirst().meshletCount());
+        assertEquals(1, handoff.unitCount());
+        assertEquals(0, handoff.units().getFirst().streamUnitId());
+        assertEquals(1, handoff.units().getFirst().meshletCount());
     }
 
     @Test
-    void runtimeDecodeWithoutLodMetadataKeepsClassicHandoff() throws Exception {
+    void runtimeDecodeWithoutStreamingMetadataKeepsClassicHandoff() throws Exception {
         MgiMeshDataCodec codec = new MgiMeshDataCodec();
         MgiMeshDataCodec.RuntimeDecodeResult decoded = codec.readForRuntime(codec.write(sampleTriangle()));
 
-        assertFalse(decoded.meshletDataPresent());
-        assertEquals(0, decoded.meshletLodLevelCount());
-        assertNull(decoded.meshletLodDataOrNull());
-        assertNull(decoded.meshletLodMetadataOrNull());
+        assertEquals(0, decoded.meshletStreamingUnitCount());
+        assertNull(decoded.meshletStreamingDataOrNull());
+        assertNull(decoded.meshletStreamingMetadataOrNull());
     }
 
     private static org.dynamisengine.meshforge.core.mesh.MeshData sampleTriangle() {
