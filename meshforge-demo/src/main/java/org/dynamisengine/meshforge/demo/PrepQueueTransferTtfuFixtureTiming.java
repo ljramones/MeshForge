@@ -101,17 +101,20 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         System.out.println("prep+queue+transfer timing (median + p95)");
         System.out.printf(Locale.ROOT, "warmup=%d runs=%d maxInflight=%d mode=%s%n", warmup, runs, maxInflight, mode.label);
         System.out.println();
-        System.out.println("| Fixture | Mode | Load/Clone ms | Pipeline ms | Pipeline Attr ms | Pipeline Topology ms | Plan ms | Pack ms | Pack Vertex ms | Pack Index ms | Pack Submesh ms | Bridge ms | Queue ms | Transfer ms | Total TTFU ms | Triangles | Upload Bytes |");
+        System.out.println("| Fixture | Mode | Load/Clone ms | Pipeline ms | Pipeline Attr ms | Topology Validate ms | Topology Degenerates ms | Topology Bounds ms | Pipeline Topology ms | Plan ms | Pack ms | Pack Vertex ms | Pack Index ms | Pack Submesh ms | Bridge ms | Queue ms | Transfer ms | Total TTFU ms | Triangles | Upload Bytes |");
         System.out.println("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
         for (Row row : rows) {
             System.out.printf(
                 Locale.ROOT,
-                "| `%s` | %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %d | %d |%n",
+                "| `%s` | %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %d | %d |%n",
                 row.name,
                 row.mode,
                 row.loadOrCloneMedianMs,
                 row.pipelineMedianMs,
                 row.pipelineAttrMedianMs,
+                row.topologyValidateMedianMs,
+                row.topologyRemoveDegeneratesMedianMs,
+                row.topologyBoundsMedianMs,
                 row.pipelineTopologyMedianMs,
                 row.planMedianMs,
                 row.packMedianMs,
@@ -129,17 +132,20 @@ public final class PrepQueueTransferTtfuFixtureTiming {
 
         System.out.println();
         System.out.println("p95 breakdown");
-        System.out.println("| Fixture | Mode | Load/Clone p95 | Pipeline p95 | Pipeline Attr p95 | Pipeline Topology p95 | Plan p95 | Pack p95 | Pack Vertex p95 | Pack Index p95 | Pack Submesh p95 | Bridge p95 | Queue p95 | Transfer p95 | Total TTFU p95 |");
+        System.out.println("| Fixture | Mode | Load/Clone p95 | Pipeline p95 | Pipeline Attr p95 | Topology Validate p95 | Topology Degenerates p95 | Topology Bounds p95 | Pipeline Topology p95 | Plan p95 | Pack p95 | Pack Vertex p95 | Pack Index p95 | Pack Submesh p95 | Bridge p95 | Queue p95 | Transfer p95 | Total TTFU p95 |");
         System.out.println("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
         for (Row row : rows) {
             System.out.printf(
                 Locale.ROOT,
-                "| `%s` | %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f |%n",
+                "| `%s` | %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f |%n",
                 row.name,
                 row.mode,
                 row.loadOrCloneP95Ms,
                 row.pipelineP95Ms,
                 row.pipelineAttrP95Ms,
+                row.topologyValidateP95Ms,
+                row.topologyRemoveDegeneratesP95Ms,
+                row.topologyBoundsP95Ms,
                 row.pipelineTopologyP95Ms,
                 row.planP95Ms,
                 row.packP95Ms,
@@ -168,6 +174,9 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         List<Long> pipelineNs = new ArrayList<>(runs);
         List<Long> pipelineAttrNs = new ArrayList<>(runs);
         List<Long> pipelineTopologyNs = new ArrayList<>(runs);
+        List<Long> topologyValidateNs = new ArrayList<>(runs);
+        List<Long> topologyRemoveDegeneratesNs = new ArrayList<>(runs);
+        List<Long> topologyBoundsNs = new ArrayList<>(runs);
         List<Long> planNs = new ArrayList<>(runs);
         List<Long> packNs = new ArrayList<>(runs);
         List<Long> packVertexPayloadNs = new ArrayList<>(runs);
@@ -229,10 +238,12 @@ public final class PrepQueueTransferTtfuFixtureTiming {
                     loadOrCloneNs.add(tLoadOrClone - t0);
                     pipelineNs.add(tPipeline - tLoadOrClone);
                     pipelineAttrNs.add(pipelineProfile.normalsNs() + pipelineProfile.tangentsNs());
-                    pipelineTopologyNs.add(
-                        pipelineProfile.validateNs()
-                            + pipelineProfile.removeDegeneratesNs()
-                            + pipelineProfile.boundsNs());
+                    topologyValidateNs.add(pipelineProfile.validateNs());
+                    topologyRemoveDegeneratesNs.add(pipelineProfile.removeDegeneratesNs());
+                    topologyBoundsNs.add(pipelineProfile.boundsNs());
+                    pipelineTopologyNs.add(pipelineProfile.validateNs()
+                        + pipelineProfile.removeDegeneratesNs()
+                        + pipelineProfile.boundsNs());
                     planNs.add(tPlan - tPipeline);
                     packNs.add(tPack - tPlan);
                     packVertexPayloadNs.add(packProfile.vertexPayloadNs());
@@ -263,6 +274,12 @@ public final class PrepQueueTransferTtfuFixtureTiming {
             toMs(p95(pipelineNs)),
             toMs(median(pipelineAttrNs)),
             toMs(p95(pipelineAttrNs)),
+            toMs(median(topologyValidateNs)),
+            toMs(p95(topologyValidateNs)),
+            toMs(median(topologyRemoveDegeneratesNs)),
+            toMs(p95(topologyRemoveDegeneratesNs)),
+            toMs(median(topologyBoundsNs)),
+            toMs(p95(topologyBoundsNs)),
             toMs(median(pipelineTopologyNs)),
             toMs(p95(pipelineTopologyNs)),
             toMs(median(planNs)),
@@ -426,6 +443,12 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         double pipelineP95Ms,
         double pipelineAttrMedianMs,
         double pipelineAttrP95Ms,
+        double topologyValidateMedianMs,
+        double topologyValidateP95Ms,
+        double topologyRemoveDegeneratesMedianMs,
+        double topologyRemoveDegeneratesP95Ms,
+        double topologyBoundsMedianMs,
+        double topologyBoundsP95Ms,
         double pipelineTopologyMedianMs,
         double pipelineTopologyP95Ms,
         double planMedianMs,
