@@ -361,6 +361,19 @@ mvn -pl meshforge-demo javafx:run
 - These are optional experimental harnesses under `meshforge-demo` only.
 - They are intentionally non-contract and not required for using MeshForge as a mesh manipulation library.
 
+4. `org.dynamisengine.meshforge.demo.PrepQueueTransferTtfuFixtureTiming`
+- Runtime geometry timing split with explicit timestamps:
+  - `prepTime = T1 - T0`
+  - `queueWait = T2 - T1`
+  - `transferTime = T3 - T2`
+  - `totalTTFU = T3 - T0`
+- Uses `Pipelines.realtimeFast`, planned pack (`buildRuntimePlan + packPlannedInto`), bridge conversion, and a bounded async upload simulator.
+- Run:
+
+```bash
+mvn -pl meshforge-demo -Dexec.mainClass=org.dynamisengine.meshforge.demo.PrepQueueTransferTtfuFixtureTiming -Dexec.args="--fixture=dragon --runs=9 --max-inflight=2" exec:java
+```
+
 See `docs/mesh-fixtures.md` for sample asset sources and local fixture setup.
 
 ---
