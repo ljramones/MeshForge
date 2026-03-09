@@ -78,7 +78,7 @@ public final class ObjToMgiMain {
         int converted = 0;
         int skipped = 0;
         for (Path obj : objFiles) {
-            Path mgi = mgiPathFor(obj);
+            Path mgi = mgiPathFor(obj, withMeshlets);
             if (Files.exists(mgi) && !overwrite) {
                 skipped++;
                 continue;
@@ -96,11 +96,11 @@ public final class ObjToMgiMain {
         System.out.printf(Locale.ROOT, "done converted=%d skipped=%d%n", converted, skipped);
     }
 
-    private static Path mgiPathFor(Path sourceObj) {
+    private static Path mgiPathFor(Path sourceObj, boolean withMeshlets) {
         String file = sourceObj.getFileName().toString();
         int dot = file.lastIndexOf('.');
         String base = dot <= 0 ? file : file.substring(0, dot);
-        return sourceObj.resolveSibling(base + ".mgi");
+        return sourceObj.resolveSibling(base + (withMeshlets ? ".meshlets.mgi" : ".mgi"));
     }
 
     private static MgiStaticMesh toMgiWithMeshlets(MeshData mesh, int maxVerts, int maxTris) {
