@@ -1,6 +1,6 @@
 # Docs Index
 
-Last updated: 2026-02-23
+Last updated: 2026-03-08
 
 ## Core
 
@@ -31,6 +31,8 @@ Last updated: 2026-02-23
 ## Planning / History
 
 - `docs/meshforge-mgi-v1-design.md` - canonical MeshForge Geometry Ingest (MGI) v1 format design
+- `docs/meshforge-mgi-performance-results.md` - measured OBJ vs MGI vs runtime-only activation results and conclusions
+- `docs/meshforge-meshlets-v1-plan.md` - meshlets v1 prototype goals, non-goals, and benchmark plan
 
 - `docs/roadmap.md` - active and next priorities
 - `docs/plan-v1.md` - historical v1 completion snapshot
