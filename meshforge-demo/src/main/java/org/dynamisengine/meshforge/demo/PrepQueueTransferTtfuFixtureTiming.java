@@ -11,6 +11,7 @@ import org.dynamisengine.meshforge.gpu.GpuGeometryUploadPlan;
 import org.dynamisengine.meshforge.gpu.MeshForgeGpuBridge;
 import org.dynamisengine.meshforge.gpu.RuntimeGeometryPayload;
 import org.dynamisengine.meshforge.loader.MeshLoaders;
+import org.dynamisengine.meshforge.mgi.MgiMeshDataCodec;
 import org.dynamisengine.meshforge.pack.packer.MeshPacker;
 import org.dynamisengine.meshforge.pack.spec.PackSpec;
 
@@ -86,10 +87,13 @@ public final class PrepQueueTransferTtfuFixtureTiming {
 
         List<Row> rows = new ArrayList<>();
         for (Path fixture : fixtures) {
-            if (mode == Mode.FULL || mode == Mode.BOTH) {
+            if (mode.includesFull()) {
                 rows.add(measureFixture(loaders, spec, fixture, warmup, runs, maxInflight, Mode.FULL));
             }
-            if (mode == Mode.RUNTIME_ONLY || mode == Mode.BOTH) {
+            if (mode.includesMgiFull()) {
+                rows.add(measureFixture(loaders, spec, fixture, warmup, runs, maxInflight, Mode.MGI_FULL));
+            }
+            if (mode.includesRuntimeOnly()) {
                 rows.add(measureFixture(loaders, spec, fixture, warmup, runs, maxInflight, Mode.RUNTIME_ONLY));
             }
         }
@@ -163,8 +167,13 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         int uploadBytes = 0;
 
         MeshData baseline = null;
+        Path mgiFixture = null;
+        MgiMeshDataCodec mgiCodec = null;
         if (mode == Mode.RUNTIME_ONLY) {
             baseline = loaders.load(fixture);
+        } else if (mode == Mode.MGI_FULL) {
+            mgiCodec = new MgiMeshDataCodec();
+            mgiFixture = ensureMgiFixture(loaders, mgiCodec, fixture);
         }
 
         try (AsyncUploadSimulator uploader = new AsyncUploadSimulator(maxInflight)) {
@@ -174,6 +183,8 @@ public final class PrepQueueTransferTtfuFixtureTiming {
                 MeshData loaded;
                 if (mode == Mode.FULL) {
                     loaded = loaders.load(fixture);
+                } else if (mode == Mode.MGI_FULL) {
+                    loaded = mgiCodec.read(Files.readAllBytes(mgiFixture));
                 } else {
                     loaded = copyOf(baseline);
                 }
@@ -333,10 +344,31 @@ public final class PrepQueueTransferTtfuFixtureTiming {
     private static Mode parseMode(String raw) {
         return switch (raw.trim().toLowerCase(Locale.ROOT)) {
             case "full" -> Mode.FULL;
+            case "mgi-full" -> Mode.MGI_FULL;
             case "runtime-only" -> Mode.RUNTIME_ONLY;
             case "both" -> Mode.BOTH;
-            default -> throw new IllegalArgumentException("--mode must be full|runtime-only|both");
+            case "all" -> Mode.ALL;
+            default -> throw new IllegalArgumentException("--mode must be full|mgi-full|runtime-only|both|all");
         };
+    }
+
+    private static Path ensureMgiFixture(MeshLoaders loaders, MgiMeshDataCodec codec, Path sourceObj) throws Exception {
+        Path mgi = mgiPathFor(sourceObj);
+        if (Files.isRegularFile(mgi)) {
+            return mgi;
+        }
+
+        MeshData loaded = loaders.load(sourceObj);
+        byte[] bytes = codec.write(loaded);
+        Files.write(mgi, bytes);
+        return mgi;
+    }
+
+    private static Path mgiPathFor(Path sourceObj) {
+        String file = sourceObj.getFileName().toString();
+        int dot = file.lastIndexOf('.');
+        String base = dot <= 0 ? file : file.substring(0, dot);
+        return sourceObj.resolveSibling(base + ".mgi");
     }
 
     private record PendingTransfer(long t0, long t1, long t2, CompletableFuture<Integer> transferFuture) {
@@ -376,13 +408,27 @@ public final class PrepQueueTransferTtfuFixtureTiming {
 
     private enum Mode {
         FULL("full"),
+        MGI_FULL("mgi-full"),
         RUNTIME_ONLY("runtime-only"),
-        BOTH("both");
+        BOTH("both"),
+        ALL("all");
 
         private final String label;
 
         Mode(String label) {
             this.label = label;
+        }
+
+        private boolean includesFull() {
+            return this == FULL || this == BOTH || this == ALL;
+        }
+
+        private boolean includesMgiFull() {
+            return this == MGI_FULL || this == ALL;
+        }
+
+        private boolean includesRuntimeOnly() {
+            return this == RUNTIME_ONLY || this == BOTH || this == ALL;
         }
     }
 
