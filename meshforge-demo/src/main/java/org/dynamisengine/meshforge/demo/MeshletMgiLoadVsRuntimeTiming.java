@@ -1,6 +1,5 @@
 package org.dynamisengine.meshforge.demo;
 
-import org.dynamisengine.meshforge.api.Pipelines;
 import org.dynamisengine.meshforge.core.bounds.Aabbf;
 import org.dynamisengine.meshforge.core.mesh.MeshData;
 import org.dynamisengine.meshforge.loader.MeshLoaders;
@@ -118,14 +117,13 @@ public final class MeshletMgiLoadVsRuntimeTiming {
 
         for (int i = 0; i < total; i++) {
             MeshData loaded = loaders.load(fixture);
-            MeshData processed = Pipelines.realtimeFast(loaded);
-            int[] indices = processed.indicesOrNull();
+            int[] indices = loaded.indicesOrNull();
             if (indices == null || indices.length == 0) {
                 throw new IllegalStateException("Fixture has no indices: " + fixture);
             }
 
             long start = System.nanoTime();
-            List<Meshlet> meshlets = MeshletClusters.buildMeshlets(processed, indices, maxVerts, maxTris);
+            List<Meshlet> meshlets = MeshletClusters.buildMeshlets(loaded, indices, maxVerts, maxTris);
             long end = System.nanoTime();
 
             if (i >= warmup) {
