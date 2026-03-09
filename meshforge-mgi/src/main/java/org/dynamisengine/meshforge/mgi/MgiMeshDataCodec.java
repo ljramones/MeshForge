@@ -107,7 +107,7 @@ public final class MgiMeshDataCodec {
         List<MgiSubmeshRange> ranges = convertSubmeshes(meshData.submeshes(), indices.length);
         MgiAabb bounds = toMgiAabb(meshData);
         MgiCanonicalMetadata metadata = canonicalMetadata(meshData, packedPositions);
-        return new MgiStaticMesh(packedPositions, packedNormals, packedUv0, bounds, metadata, indices, ranges);
+        return new MgiStaticMesh(packedPositions, packedNormals, packedUv0, bounds, metadata, null, indices, ranges);
     }
 
     public static MeshData toMeshData(MgiStaticMesh mesh) {

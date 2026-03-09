@@ -17,6 +17,8 @@ public final class MgiStaticMeshCodec {
     private static final int SUBMESH_ENTRY_INTS = 4;
     private static final int BOUNDS_FLOATS = 6;
     private static final int METADATA_INTS = 4;
+    private static final int MESHLET_DESCRIPTOR_INTS = 8;
+    private static final int MESHLET_BOUNDS_FLOATS = 6;
 
     private static final int SEM_POSITION = 1;
     private static final int SEM_NORMAL = 2;
@@ -39,6 +41,18 @@ public final class MgiStaticMeshCodec {
         byte[] metadataBytes = mesh.canonicalMetadataOrNull() == null
             ? null
             : encodeMetadata(mesh.canonicalMetadataOrNull());
+        byte[] meshletDescriptorBytes = mesh.meshletDataOrNull() == null
+            ? null
+            : encodeMeshletDescriptors(mesh.meshletDataOrNull().descriptors());
+        byte[] meshletRemapBytes = mesh.meshletDataOrNull() == null
+            ? null
+            : encodeIntArray(mesh.meshletDataOrNull().vertexRemap());
+        byte[] meshletTriangleBytes = mesh.meshletDataOrNull() == null
+            ? null
+            : encodeIntArray(mesh.meshletDataOrNull().triangles());
+        byte[] meshletBoundsBytes = mesh.meshletDataOrNull() == null
+            ? null
+            : encodeMeshletBounds(mesh.meshletDataOrNull().bounds());
 
         long directoryOffset = MgiConstants.HEADER_SIZE_BYTES;
         int chunkCount = 5;
@@ -47,6 +61,9 @@ public final class MgiStaticMeshCodec {
         }
         if (metadataBytes != null) {
             chunkCount++;
+        }
+        if (meshletDescriptorBytes != null) {
+            chunkCount += 4;
         }
         long payloadOffset = directoryOffset + ((long) chunkCount * MgiConstants.CHUNK_ENTRY_SIZE_BYTES);
 
@@ -78,11 +95,61 @@ public final class MgiStaticMeshCodec {
             } else {
                 entries = List.of(meshTable, attrSchema, vertices, indices, submeshes, bounds, metadata);
             }
+            payloadOffset = metadata.endExclusive();
+        }
+
+        MgiChunkEntry meshletDescriptors = null;
+        MgiChunkEntry meshletRemap = null;
+        MgiChunkEntry meshletTriangles = null;
+        MgiChunkEntry meshletBounds = null;
+        if (meshletDescriptorBytes != null) {
+            meshletDescriptors = new MgiChunkEntry(
+                MgiChunkType.MESHLET_DESCRIPTORS.id(),
+                payloadOffset,
+                meshletDescriptorBytes.length,
+                0
+            );
+            payloadOffset = meshletDescriptors.endExclusive();
+            meshletRemap = new MgiChunkEntry(
+                MgiChunkType.MESHLET_VERTEX_REMAP.id(),
+                payloadOffset,
+                meshletRemapBytes.length,
+                0
+            );
+            payloadOffset = meshletRemap.endExclusive();
+            meshletTriangles = new MgiChunkEntry(
+                MgiChunkType.MESHLET_TRIANGLES.id(),
+                payloadOffset,
+                meshletTriangleBytes.length,
+                0
+            );
+            payloadOffset = meshletTriangles.endExclusive();
+            meshletBounds = new MgiChunkEntry(
+                MgiChunkType.MESHLET_BOUNDS.id(),
+                payloadOffset,
+                meshletBoundsBytes.length,
+                0
+            );
+            if (entries.size() == 5) {
+                entries = List.of(meshTable, attrSchema, vertices, indices, submeshes,
+                    meshletDescriptors, meshletRemap, meshletTriangles, meshletBounds);
+            } else if (bounds != null && metadata == null) {
+                entries = List.of(meshTable, attrSchema, vertices, indices, submeshes, bounds,
+                    meshletDescriptors, meshletRemap, meshletTriangles, meshletBounds);
+            } else if (bounds == null) {
+                entries = List.of(meshTable, attrSchema, vertices, indices, submeshes, metadata,
+                    meshletDescriptors, meshletRemap, meshletTriangles, meshletBounds);
+            } else {
+                entries = List.of(meshTable, attrSchema, vertices, indices, submeshes, bounds, metadata,
+                    meshletDescriptors, meshletRemap, meshletTriangles, meshletBounds);
+            }
         }
         MgiHeader header = MgiHeader.v1(entries.size(), directoryOffset, 1);
-        long fileSize = metadata != null
-            ? metadata.endExclusive()
-            : (bounds == null ? submeshes.endExclusive() : bounds.endExclusive());
+        long fileSize = meshletBounds != null
+            ? meshletBounds.endExclusive()
+            : (metadata != null
+                ? metadata.endExclusive()
+                : (bounds == null ? submeshes.endExclusive() : bounds.endExclusive()));
         MgiValidator.validate(header, entries, fileSize);
 
         ByteArrayOutputStream out = new ByteArrayOutputStream((int) fileSize);
@@ -99,6 +166,12 @@ public final class MgiStaticMeshCodec {
         }
         if (metadataBytes != null) {
             out.write(metadataBytes);
+        }
+        if (meshletDescriptorBytes != null) {
+            out.write(meshletDescriptorBytes);
+            out.write(meshletRemapBytes);
+            out.write(meshletTriangleBytes);
+            out.write(meshletBoundsBytes);
         }
         return out.toByteArray();
     }
@@ -126,6 +199,10 @@ public final class MgiStaticMeshCodec {
         MgiChunkEntry submeshEntry = required(byType, MgiChunkType.SUBMESH_TABLE);
         MgiChunkEntry boundsEntry = byType.get(MgiChunkType.BOUNDS);
         MgiChunkEntry metadataEntry = byType.get(MgiChunkType.METADATA);
+        MgiChunkEntry meshletDescriptorEntry = byType.get(MgiChunkType.MESHLET_DESCRIPTORS);
+        MgiChunkEntry meshletRemapEntry = byType.get(MgiChunkType.MESHLET_VERTEX_REMAP);
+        MgiChunkEntry meshletTriangleEntry = byType.get(MgiChunkType.MESHLET_TRIANGLES);
+        MgiChunkEntry meshletBoundsEntry = byType.get(MgiChunkType.MESHLET_BOUNDS);
 
         int[] meshTable = decodeIntPayload(bytes, meshTableEntry, MESH_TABLE_ENTRY_INTS);
         int vertexCount = meshTable[0];
@@ -146,6 +223,14 @@ public final class MgiStaticMeshCodec {
 
         MgiAabb bounds = decodeBounds(bytes, boundsEntry);
         MgiCanonicalMetadata metadata = decodeMetadata(bytes, metadataEntry);
+        MgiMeshletData meshletData = decodeMeshlets(
+            bytes,
+            meshletDescriptorEntry,
+            meshletRemapEntry,
+            meshletTriangleEntry,
+            meshletBoundsEntry,
+            submeshCount
+        );
 
         MgiStaticMesh mesh = new MgiStaticMesh(
             streams.positions,
@@ -153,6 +238,7 @@ public final class MgiStaticMeshCodec {
             streams.uv0,
             bounds,
             metadata,
+            meshletData,
             indices,
             List.of(ranges)
         );
@@ -228,6 +314,14 @@ public final class MgiStaticMeshCodec {
         return b.array();
     }
 
+    private static byte[] encodeIntArray(int[] values) {
+        ByteBuffer b = ByteBuffer.allocate(values.length * Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        for (int value : values) {
+            b.putInt(value);
+        }
+        return b.array();
+    }
+
     private static byte[] encodeBounds(MgiAabb bounds) {
         ByteBuffer b = ByteBuffer.allocate(BOUNDS_FLOATS * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
         b.putFloat(bounds.minX());
@@ -236,6 +330,36 @@ public final class MgiStaticMeshCodec {
         b.putFloat(bounds.maxX());
         b.putFloat(bounds.maxY());
         b.putFloat(bounds.maxZ());
+        return b.array();
+    }
+
+    private static byte[] encodeMeshletDescriptors(List<MgiMeshletDescriptor> descriptors) {
+        ByteBuffer b = ByteBuffer.allocate(descriptors.size() * MESHLET_DESCRIPTOR_INTS * Integer.BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN);
+        for (MgiMeshletDescriptor descriptor : descriptors) {
+            b.putInt(descriptor.submeshIndex());
+            b.putInt(descriptor.materialSlot());
+            b.putInt(descriptor.vertexRemapOffset());
+            b.putInt(descriptor.vertexCount());
+            b.putInt(descriptor.triangleOffset());
+            b.putInt(descriptor.triangleCount());
+            b.putInt(descriptor.boundsIndex());
+            b.putInt(descriptor.flags());
+        }
+        return b.array();
+    }
+
+    private static byte[] encodeMeshletBounds(List<MgiMeshletBounds> bounds) {
+        ByteBuffer b = ByteBuffer.allocate(bounds.size() * MESHLET_BOUNDS_FLOATS * Float.BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN);
+        for (MgiMeshletBounds meshletBounds : bounds) {
+            b.putFloat(meshletBounds.minX());
+            b.putFloat(meshletBounds.minY());
+            b.putFloat(meshletBounds.minZ());
+            b.putFloat(meshletBounds.maxX());
+            b.putFloat(meshletBounds.maxY());
+            b.putFloat(meshletBounds.maxZ());
+        }
         return b.array();
     }
 
@@ -379,6 +503,106 @@ public final class MgiStaticMeshCodec {
             b.getInt(),
             b.getInt()
         );
+    }
+
+    private static MgiMeshletData decodeMeshlets(
+        byte[] bytes,
+        MgiChunkEntry descriptorEntry,
+        MgiChunkEntry remapEntry,
+        MgiChunkEntry triangleEntry,
+        MgiChunkEntry boundsEntry,
+        int submeshCount
+    ) {
+        int present = 0;
+        if (descriptorEntry != null) {
+            present++;
+        }
+        if (remapEntry != null) {
+            present++;
+        }
+        if (triangleEntry != null) {
+            present++;
+        }
+        if (boundsEntry != null) {
+            present++;
+        }
+        if (present == 0) {
+            return null;
+        }
+        if (present != 4) {
+            throw new MgiValidationException("meshlet chunk set must be complete when present");
+        }
+
+        int[] descriptorInts = decodeIntPayloadMultiple(bytes, descriptorEntry, MESHLET_DESCRIPTOR_INTS);
+        int descriptorCount = descriptorInts.length / MESHLET_DESCRIPTOR_INTS;
+        int[] remap = decodeIntPayloadAny(bytes, remapEntry);
+        int[] triangles = decodeIntPayloadAny(bytes, triangleEntry);
+        List<MgiMeshletBounds> bounds = decodeMeshletBounds(bytes, boundsEntry);
+
+        ArrayList<MgiMeshletDescriptor> descriptors = new ArrayList<>(descriptorCount);
+        for (int i = 0; i < descriptorCount; i++) {
+            int base = i * MESHLET_DESCRIPTOR_INTS;
+            MgiMeshletDescriptor descriptor = new MgiMeshletDescriptor(
+                descriptorInts[base],
+                descriptorInts[base + 1],
+                descriptorInts[base + 2],
+                descriptorInts[base + 3],
+                descriptorInts[base + 4],
+                descriptorInts[base + 5],
+                descriptorInts[base + 6],
+                descriptorInts[base + 7]
+            );
+            if (descriptor.submeshIndex() >= submeshCount) {
+                throw new MgiValidationException("meshlet descriptor submesh index out of range");
+            }
+            descriptors.add(descriptor);
+        }
+
+        return new MgiMeshletData(descriptors, remap, triangles, bounds);
+    }
+
+    private static int[] decodeIntPayloadAny(byte[] bytes, MgiChunkEntry entry) {
+        if ((entry.lengthBytes() % Integer.BYTES) != 0) {
+            throw new MgiValidationException("invalid int payload alignment");
+        }
+        int expectedCount = Math.toIntExact(entry.lengthBytes() / Integer.BYTES);
+        return decodeIntPayload(bytes, entry, expectedCount);
+    }
+
+    private static int[] decodeIntPayloadMultiple(byte[] bytes, MgiChunkEntry entry, int elementInts) {
+        if ((entry.lengthBytes() % Integer.BYTES) != 0) {
+            throw new MgiValidationException("invalid int payload alignment");
+        }
+        int count = Math.toIntExact(entry.lengthBytes() / Integer.BYTES);
+        if ((count % elementInts) != 0) {
+            throw new MgiValidationException("invalid int payload element size");
+        }
+        return decodeIntPayload(bytes, entry, count);
+    }
+
+    private static List<MgiMeshletBounds> decodeMeshletBounds(byte[] bytes, MgiChunkEntry entry) {
+        if ((entry.lengthBytes() % Float.BYTES) != 0) {
+            throw new MgiValidationException("meshlet bounds payload is not float-aligned");
+        }
+        int floatCount = Math.toIntExact(entry.lengthBytes() / Float.BYTES);
+        if ((floatCount % MESHLET_BOUNDS_FLOATS) != 0) {
+            throw new MgiValidationException("invalid meshlet bounds payload size");
+        }
+        int boundCount = floatCount / MESHLET_BOUNDS_FLOATS;
+        ByteBuffer b = ByteBuffer.wrap(bytes, Math.toIntExact(entry.offsetBytes()), Math.toIntExact(entry.lengthBytes()))
+            .order(ByteOrder.LITTLE_ENDIAN);
+        ArrayList<MgiMeshletBounds> out = new ArrayList<>(boundCount);
+        for (int i = 0; i < boundCount; i++) {
+            out.add(new MgiMeshletBounds(
+                b.getFloat(),
+                b.getFloat(),
+                b.getFloat(),
+                b.getFloat(),
+                b.getFloat(),
+                b.getFloat()
+            ));
+        }
+        return List.copyOf(out);
     }
 
     private static MgiChunkEntry required(Map<MgiChunkType, MgiChunkEntry> map, MgiChunkType type) {

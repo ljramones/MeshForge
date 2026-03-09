@@ -13,7 +13,11 @@ public enum MgiChunkType {
     INDEX_DATA(0x1004, true),
     SUBMESH_TABLE(0x1005, true),
     BOUNDS(0x1006, false),
-    METADATA(0x1007, false);
+    METADATA(0x1007, false),
+    MESHLET_DESCRIPTORS(0x1101, false),
+    MESHLET_VERTEX_REMAP(0x1102, false),
+    MESHLET_TRIANGLES(0x1103, false),
+    MESHLET_BOUNDS(0x1104, false);
 
     private static final Map<Integer, MgiChunkType> BY_ID = new HashMap<>();
 
