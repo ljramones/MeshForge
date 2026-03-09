@@ -14,6 +14,24 @@ mvn -q -f meshforge-demo/pom.xml exec:java \
   -Dexec.args="--mode=all --max-inflight=2 --warmup=2 --runs=9"
 ```
 
+## Benchmark Fixtures
+
+The results in this document were produced using pre-generated MGI sidecars stored under:
+
+```text
+fixtures/baseline/*.mgi
+```
+
+These sidecars are intentionally versioned as benchmark fixtures for reproducibility.
+
+Regenerate sidecars from source OBJ fixtures with:
+
+```bash
+mvn -q -f meshforge-demo/pom.xml exec:java \
+  -Dexec.mainClass=org.dynamisengine.meshforge.demo.ObjToMgiMain \
+  -Dexec.args="--input=fixtures/baseline --overwrite"
+```
+
 ## Pipeline
 
 ```text
