@@ -21,6 +21,7 @@ class MeshletVisibilityUploadPrepTest {
         assertEquals(0, payload.boundsOffsetFloats());
         assertEquals(6, payload.boundsStrideFloats());
         assertEquals(0, payload.boundsPayload().length);
+        assertEquals(0, payload.expectedBoundsPayloadLengthFloats());
         assertEquals(0, payload.boundsByteSize());
         assertEquals(24, payload.boundsStrideBytes());
         assertEquals(0, payload.toBoundsByteBuffer().remaining());
@@ -60,6 +61,7 @@ class MeshletVisibilityUploadPrepTest {
         assertEquals(12, payload.boundsPayload().length);
         assertEquals(48, payload.boundsByteSize());
         assertEquals(24, payload.boundsStrideBytes());
+        assertEquals(payload.boundsPayload().length, payload.expectedBoundsPayloadLengthFloats());
         assertArrayEquals(
             new float[] {0f, 0f, 0f, 1f, 1f, 1f, -1f, -2f, -3f, 2f, 3f, 4f},
             payload.boundsPayload()

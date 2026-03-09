@@ -3,6 +3,10 @@
 ## Purpose
 Introduce the minimal data and upload-preparation seam required for future GPU-driven meshlet visibility, without implementing compute visibility or draw integration yet.
 
+Boundary rule:
+- MeshForge prepares payloads.
+- DynamisGPU performs upload, binding, dispatch, synchronization, and execution.
+
 ## Phase 1 Baseline
 Phase 1 is complete and provides:
 - CPU frustum culling over prebaked meshlet bounds
@@ -56,6 +60,29 @@ This phase does **not** implement:
 - cone/occlusion culling
 - hierarchy/LOD
 - streaming policy
+
+## MeshForge -> DynamisGPU Handoff Contract
+MeshForge hands off `GpuMeshletVisibilityPayload` as the formal contract for GPU visibility input.
+
+Contract summary:
+- per-meshlet layout: `minX, minY, minZ, maxX, maxY, maxZ`
+- stride: 6 floats (24 bytes)
+- little-endian byte export (`toBoundsByteBuffer()`)
+- deterministic meshlet index ordering
+- explicit count/size metadata:
+  - `meshletCount`
+  - `boundsStrideFloats` / `boundsStrideBytes`
+  - `boundsFloatCount` / `boundsByteSize`
+
+Responsibilities:
+- MeshForge:
+  - flatten and validate meshlet bounds payload
+  - expose metadata and byte-ready export
+- DynamisGPU (future phase):
+  - upload payload to device buffers
+  - bind resources for compute visibility
+  - dispatch visibility kernels
+  - manage synchronization/fences and downstream execution integration
 
 ## Next Step
 Use this payload seam as the input contract for a minimal compute visibility prototype:

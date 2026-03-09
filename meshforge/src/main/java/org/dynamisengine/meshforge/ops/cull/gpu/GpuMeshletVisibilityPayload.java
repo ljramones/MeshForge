@@ -2,6 +2,7 @@ package org.dynamisengine.meshforge.ops.cull.gpu;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 
 /**
  * GPU-ready meshlet visibility payload containing flattened meshlet bounds.
@@ -9,6 +10,7 @@ import java.nio.ByteOrder;
  * Layout v1:
  * - meshlet bounds are packed as 6 float values per meshlet
  * - order per meshlet: minX, minY, minZ, maxX, maxY, maxZ
+ * - little-endian byte export
  */
 public record GpuMeshletVisibilityPayload(
     int meshletCount,
@@ -32,7 +34,7 @@ public record GpuMeshletVisibilityPayload(
             throw new NullPointerException("boundsPayload");
         }
 
-        int required = meshletCount == 0 ? 0 : (boundsOffsetFloats + (meshletCount * boundsStrideFloats));
+        int required = expectedBoundsPayloadLengthFloats(meshletCount, boundsOffsetFloats, boundsStrideFloats);
         if (boundsPayload.length != required) {
             throw new IllegalArgumentException(
                 "boundsPayload length mismatch: expected=" + required + " actual=" + boundsPayload.length
@@ -43,11 +45,40 @@ public record GpuMeshletVisibilityPayload(
     }
 
     public int boundsByteSize() {
-        return boundsPayload.length * Float.BYTES;
+        return boundsFloatCount() * Float.BYTES;
     }
 
     public int boundsStrideBytes() {
         return boundsStrideFloats * Float.BYTES;
+    }
+
+    /**
+     * Returns total payload float count.
+     */
+    public int boundsFloatCount() {
+        return boundsPayload.length;
+    }
+
+    /**
+     * Returns expected payload float count from meshlet metadata.
+     */
+    public int expectedBoundsPayloadLengthFloats() {
+        return expectedBoundsPayloadLengthFloats(meshletCount, boundsOffsetFloats, boundsStrideFloats);
+    }
+
+    /**
+     * Returns a defensive copy of raw bounds payload floats.
+     */
+    @Override
+    public float[] boundsPayload() {
+        return boundsPayload.clone();
+    }
+
+    /**
+     * Returns a read-only little-endian float view over packed bounds payload.
+     */
+    public FloatBuffer toBoundsFloatBuffer() {
+        return toBoundsByteBuffer().asFloatBuffer().asReadOnlyBuffer();
     }
 
     /**
@@ -60,5 +91,9 @@ public record GpuMeshletVisibilityPayload(
         }
         out.flip();
         return out;
+    }
+
+    private static int expectedBoundsPayloadLengthFloats(int meshletCount, int offset, int stride) {
+        return meshletCount == 0 ? 0 : (offset + (meshletCount * stride));
     }
 }

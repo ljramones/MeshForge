@@ -6,6 +6,8 @@ import java.util.List;
 
 /**
  * CPU-side preparation of meshlet visibility input payloads for future GPU culling.
+ * <p>
+ * This class is a handoff seam only. It does not perform GPU upload or execution.
  */
 public final class MeshletVisibilityUploadPrep {
     private MeshletVisibilityUploadPrep() {
@@ -15,6 +17,7 @@ public final class MeshletVisibilityUploadPrep {
      * Flattens meshlet bounds into GPU-ready payload layout.
      *
      * Per meshlet order: minX, minY, minZ, maxX, maxY, maxZ.
+     * Meshlet ordering is preserved exactly as provided.
      */
     public static GpuMeshletVisibilityPayload fromMeshletBounds(List<Aabbf> meshletBounds) {
         if (meshletBounds == null) {
