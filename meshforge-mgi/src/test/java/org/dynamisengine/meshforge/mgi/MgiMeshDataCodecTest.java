@@ -12,6 +12,7 @@ import org.dynamisengine.meshforge.core.bounds.Spheref;
 import org.dynamisengine.meshforge.core.mesh.MeshData;
 import org.dynamisengine.meshforge.core.mesh.Submesh;
 import org.dynamisengine.meshforge.core.topology.Topology;
+import org.dynamisengine.meshforge.ops.raytrace.RayTracingGeometryMetadata;
 import org.dynamisengine.meshforge.pack.buffer.PackedMesh;
 import org.dynamisengine.meshforge.pack.packer.MeshPacker;
 import org.junit.jupiter.api.Test;
@@ -173,6 +174,21 @@ class MgiMeshDataCodecTest {
         assertFalse(decoded.meshletDataPresent());
         assertEquals(0, decoded.meshletDescriptorCount());
         assertEquals(input.vertexCount(), decoded.meshData().vertexCount());
+    }
+
+    @Test
+    void runtimeDecodeExposesRayTracingMetadata() throws Exception {
+        MeshData input = sampleTriangleMeshWithNormalsUv();
+        MgiMeshDataCodec codec = new MgiMeshDataCodec();
+
+        MgiMeshDataCodec.RuntimeDecodeResult decoded = codec.readForRuntime(codec.write(input));
+        RayTracingGeometryMetadata rt = decoded.rayTracingMetadataOrNull();
+
+        assertNotNull(rt);
+        assertEquals(input.submeshes().size(), rt.regionCount());
+        assertEquals(0, rt.regions().get(0).submeshIndex());
+        assertEquals(input.submeshes().get(0).firstIndex(), rt.regions().get(0).firstIndex());
+        assertEquals(input.submeshes().get(0).indexCount(), rt.regions().get(0).indexCount());
     }
 
     @Test

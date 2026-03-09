@@ -21,6 +21,7 @@ public final class MgiStaticMeshCodec {
     private static final int MESHLET_BOUNDS_FLOATS = 6;
     private static final int MESHLET_LOD_LEVEL_BYTES = (3 * Integer.BYTES) + Float.BYTES;
     private static final int MESHLET_STREAM_UNIT_INTS = 5;
+    private static final int RT_REGION_INTS = 5;
 
     private static final int SEM_POSITION = 1;
     private static final int SEM_NORMAL = 2;
@@ -61,6 +62,9 @@ public final class MgiStaticMeshCodec {
         byte[] meshletStreamUnitBytes = mesh.meshletStreamingDataOrNull() == null
             ? null
             : encodeMeshletStreamUnits(mesh.meshletStreamingDataOrNull().units());
+        byte[] rtRegionBytes = mesh.rayTracingDataOrNull() == null
+            ? null
+            : encodeRayTracingRegions(mesh.rayTracingDataOrNull().regions());
 
         long directoryOffset = MgiConstants.HEADER_SIZE_BYTES;
         int chunkCount = 5;
@@ -77,6 +81,9 @@ public final class MgiStaticMeshCodec {
             chunkCount++;
         }
         if (meshletStreamUnitBytes != null) {
+            chunkCount++;
+        }
+        if (rtRegionBytes != null) {
             chunkCount++;
         }
         long payloadOffset = directoryOffset + ((long) chunkCount * MgiConstants.CHUNK_ENTRY_SIZE_BYTES);
@@ -173,6 +180,17 @@ public final class MgiStaticMeshCodec {
             entries.add(meshletStreamUnits);
             payloadOffset = meshletStreamUnits.endExclusive();
         }
+        MgiChunkEntry rtRegions = null;
+        if (rtRegionBytes != null) {
+            rtRegions = new MgiChunkEntry(
+                MgiChunkType.RAY_TRACING_REGIONS.id(),
+                payloadOffset,
+                rtRegionBytes.length,
+                0
+            );
+            entries.add(rtRegions);
+            payloadOffset = rtRegions.endExclusive();
+        }
         MgiHeader header = MgiHeader.v1(entries.size(), directoryOffset, 1);
         long fileSize = payloadOffset;
         MgiValidator.validate(header, List.copyOf(entries), fileSize);
@@ -203,6 +221,9 @@ public final class MgiStaticMeshCodec {
         }
         if (meshletStreamUnitBytes != null) {
             out.write(meshletStreamUnitBytes);
+        }
+        if (rtRegionBytes != null) {
+            out.write(rtRegionBytes);
         }
         return out.toByteArray();
     }
@@ -236,6 +257,7 @@ public final class MgiStaticMeshCodec {
         MgiChunkEntry meshletBoundsEntry = byType.get(MgiChunkType.MESHLET_BOUNDS);
         MgiChunkEntry meshletLodEntry = byType.get(MgiChunkType.MESHLET_LOD_LEVELS);
         MgiChunkEntry meshletStreamEntry = byType.get(MgiChunkType.MESHLET_STREAM_UNITS);
+        MgiChunkEntry rtRegionsEntry = byType.get(MgiChunkType.RAY_TRACING_REGIONS);
 
         int[] meshTable = decodeIntPayload(bytes, meshTableEntry, MESH_TABLE_ENTRY_INTS);
         int vertexCount = meshTable[0];
@@ -266,6 +288,7 @@ public final class MgiStaticMeshCodec {
         );
         MgiMeshletLodData meshletLodData = decodeMeshletLodLevels(bytes, meshletLodEntry);
         MgiMeshletStreamingData meshletStreamingData = decodeMeshletStreamUnits(bytes, meshletStreamEntry);
+        MgiRayTracingData rayTracingData = decodeRayTracingRegions(bytes, rtRegionsEntry);
 
         MgiStaticMesh mesh = new MgiStaticMesh(
             streams.positions,
@@ -276,6 +299,7 @@ public final class MgiStaticMeshCodec {
             meshletData,
             meshletLodData,
             meshletStreamingData,
+            rayTracingData,
             indices,
             List.of(ranges)
         );
@@ -421,6 +445,19 @@ public final class MgiStaticMeshCodec {
             b.putInt(unit.meshletCount());
             b.putInt(unit.payloadByteOffset());
             b.putInt(unit.payloadByteSize());
+        }
+        return b.array();
+    }
+
+    private static byte[] encodeRayTracingRegions(List<MgiRayTracingRegion> regions) {
+        ByteBuffer b = ByteBuffer.allocate(regions.size() * RT_REGION_INTS * Integer.BYTES)
+            .order(ByteOrder.LITTLE_ENDIAN);
+        for (MgiRayTracingRegion region : regions) {
+            b.putInt(region.submeshIndex());
+            b.putInt(region.firstIndex());
+            b.putInt(region.indexCount());
+            b.putInt(region.materialSlot());
+            b.putInt(region.flags());
         }
         return b.array();
     }
@@ -715,6 +752,29 @@ public final class MgiStaticMeshCodec {
         return new MgiMeshletStreamingData(units);
     }
 
+    private static MgiRayTracingData decodeRayTracingRegions(byte[] bytes, MgiChunkEntry entry) {
+        if (entry == null) {
+            return null;
+        }
+        int[] regionInts = decodeIntPayloadMultiple(bytes, entry, RT_REGION_INTS);
+        int regionCount = regionInts.length / RT_REGION_INTS;
+        if (regionCount == 0) {
+            throw new MgiValidationException("ray tracing region payload must not be empty");
+        }
+        ArrayList<MgiRayTracingRegion> regions = new ArrayList<>(regionCount);
+        for (int i = 0; i < regionCount; i++) {
+            int base = i * RT_REGION_INTS;
+            regions.add(new MgiRayTracingRegion(
+                regionInts[base],
+                regionInts[base + 1],
+                regionInts[base + 2],
+                regionInts[base + 3],
+                regionInts[base + 4]
+            ));
+        }
+        return new MgiRayTracingData(regions);
+    }
+
     private static MgiChunkEntry required(Map<MgiChunkType, MgiChunkEntry> map, MgiChunkType type) {
         MgiChunkEntry entry = map.get(type);
         if (entry == null) {
@@ -779,6 +839,18 @@ public final class MgiStaticMeshCodec {
                 long end = (long) unit.meshletStart() + unit.meshletCount();
                 if (end > descriptorCount) {
                     throw new MgiValidationException("meshlet streaming unit range exceeds descriptor count");
+                }
+            }
+        }
+        if (mesh.rayTracingDataOrNull() != null) {
+            int submeshCount = mesh.submeshes().size();
+            for (MgiRayTracingRegion region : mesh.rayTracingDataOrNull().regions()) {
+                if (region.submeshIndex() >= submeshCount) {
+                    throw new MgiValidationException("ray tracing region submesh index out of range");
+                }
+                long end = (long) region.firstIndex() + region.indexCount();
+                if (end > totalIndexCount) {
+                    throw new MgiValidationException("ray tracing region range exceeds index count");
                 }
             }
         }

@@ -126,6 +126,40 @@ class MgiStaticMeshCodecTest {
     }
 
     @Test
+    void roundTripsOptionalRayTracingRegionsChunk() throws Exception {
+        MgiStaticMesh input = new MgiStaticMesh(
+            new float[] {
+                0f, 0f, 0f,
+                1f, 0f, 0f,
+                0f, 1f, 0f,
+                1f, 1f, 0f
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new MgiRayTracingData(List.of(
+                new MgiRayTracingRegion(0, 0, 3, 0, 1),
+                new MgiRayTracingRegion(1, 3, 3, 2, 0)
+            )),
+            new int[] {0, 1, 2, 1, 3, 2},
+            List.of(
+                new MgiSubmeshRange(0, 3, 0),
+                new MgiSubmeshRange(3, 3, 2)
+            )
+        );
+
+        MgiStaticMeshCodec codec = new MgiStaticMeshCodec();
+        byte[] bytes = codec.write(input);
+        MgiStaticMesh output = codec.read(bytes);
+
+        assertEquals(input.rayTracingDataOrNull(), output.rayTracingDataOrNull());
+    }
+
+    @Test
     void rejectsOutOfRangeIndexOnWrite() {
         MgiStaticMesh invalid = new MgiStaticMesh(
             new float[] {

@@ -13,6 +13,7 @@ import java.util.List;
  * @param meshletDataOrNull optional meshlet metadata payload
  * @param meshletLodDataOrNull optional meshlet LOD metadata payload
  * @param meshletStreamingDataOrNull optional meshlet streaming metadata payload
+ * @param rayTracingDataOrNull optional RT-relevant geometry metadata payload
  * @param indices triangle index buffer (uint32 domain)
  * @param submeshes submesh index ranges
  */
@@ -25,6 +26,7 @@ public record MgiStaticMesh(
     MgiMeshletData meshletDataOrNull,
     MgiMeshletLodData meshletLodDataOrNull,
     MgiMeshletStreamingData meshletStreamingDataOrNull,
+    MgiRayTracingData rayTracingDataOrNull,
     int[] indices,
     List<MgiSubmeshRange> submeshes
 ) {
@@ -78,8 +80,41 @@ public record MgiStaticMesh(
         meshletStreamingDataOrNull = meshletStreamingDataOrNull == null ? null : new MgiMeshletStreamingData(
             meshletStreamingDataOrNull.units()
         );
+        rayTracingDataOrNull = rayTracingDataOrNull == null ? null : new MgiRayTracingData(
+            rayTracingDataOrNull.regions()
+        );
         indices = indices.clone();
         submeshes = List.copyOf(submeshes);
+    }
+
+    /**
+     * Backward-compatible constructor for pre-RT MGI static mesh construction paths.
+     */
+    public MgiStaticMesh(
+        float[] positions,
+        float[] normalsOrNull,
+        float[] uv0OrNull,
+        MgiAabb boundsOrNull,
+        MgiCanonicalMetadata canonicalMetadataOrNull,
+        MgiMeshletData meshletDataOrNull,
+        MgiMeshletLodData meshletLodDataOrNull,
+        MgiMeshletStreamingData meshletStreamingDataOrNull,
+        int[] indices,
+        List<MgiSubmeshRange> submeshes
+    ) {
+        this(
+            positions,
+            normalsOrNull,
+            uv0OrNull,
+            boundsOrNull,
+            canonicalMetadataOrNull,
+            meshletDataOrNull,
+            meshletLodDataOrNull,
+            meshletStreamingDataOrNull,
+            null,
+            indices,
+            submeshes
+        );
     }
 
     public int vertexCount() {

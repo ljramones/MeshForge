@@ -9,6 +9,8 @@ import org.dynamisengine.meshforge.core.bounds.Boundsf;
 import org.dynamisengine.meshforge.core.bounds.Spheref;
 import org.dynamisengine.meshforge.core.mesh.MeshData;
 import org.dynamisengine.meshforge.core.mesh.Submesh;
+import org.dynamisengine.meshforge.ops.raytrace.RayTracingGeometryMetadata;
+import org.dynamisengine.meshforge.ops.raytrace.RayTracingGeometryRegionMetadata;
 import org.dynamisengine.meshforge.core.topology.Topology;
 import org.dynamisengine.meshforge.ops.lod.MeshletLodLevelMetadata;
 import org.dynamisengine.meshforge.ops.lod.MeshletLodMetadata;
@@ -36,6 +38,7 @@ public final class MgiMeshDataCodec {
      * @param meshletDataOrNull optional decoded meshlet metadata payload
      * @param meshletLodDataOrNull optional decoded meshlet LOD metadata payload
      * @param meshletStreamingDataOrNull optional decoded meshlet streaming metadata payload
+     * @param rayTracingDataOrNull optional decoded RT metadata payload
      */
     public record RuntimeDecodeResult(
         MeshData meshData,
@@ -45,7 +48,8 @@ public final class MgiMeshDataCodec {
         boolean metadataPresent,
         MgiMeshletData meshletDataOrNull,
         MgiMeshletLodData meshletLodDataOrNull,
-        MgiMeshletStreamingData meshletStreamingDataOrNull
+        MgiMeshletStreamingData meshletStreamingDataOrNull,
+        MgiRayTracingData rayTracingDataOrNull
     ) {
         public RuntimeDecodeResult {
             if (meshData == null) {
@@ -101,6 +105,24 @@ public final class MgiMeshDataCodec {
             }
             return new MeshletStreamingMetadata(units);
         }
+
+        public RayTracingGeometryMetadata rayTracingMetadataOrNull() {
+            if (rayTracingDataOrNull == null) {
+                return null;
+            }
+            ArrayList<RayTracingGeometryRegionMetadata> regions =
+                new ArrayList<>(rayTracingDataOrNull.regions().size());
+            for (MgiRayTracingRegion region : rayTracingDataOrNull.regions()) {
+                regions.add(new RayTracingGeometryRegionMetadata(
+                    region.submeshIndex(),
+                    region.firstIndex(),
+                    region.indexCount(),
+                    region.materialSlot(),
+                    region.flags()
+                ));
+            }
+            return new RayTracingGeometryMetadata(regions);
+        }
     }
 
     private final MgiStaticMeshCodec staticMeshCodec = new MgiStaticMeshCodec();
@@ -126,6 +148,7 @@ public final class MgiMeshDataCodec {
         MgiMeshletData meshletData = staticMesh.meshletDataOrNull();
         MgiMeshletLodData meshletLodData = staticMesh.meshletLodDataOrNull();
         MgiMeshletStreamingData meshletStreamingData = staticMesh.meshletStreamingDataOrNull();
+        MgiRayTracingData rayTracingData = staticMesh.rayTracingDataOrNull();
         return new RuntimeDecodeResult(
             meshData,
             metadata != null && metadata.trustedCanonical(),
@@ -134,7 +157,8 @@ public final class MgiMeshDataCodec {
             metadata != null,
             meshletData,
             meshletLodData,
-            meshletStreamingData
+            meshletStreamingData,
+            rayTracingData
         );
     }
 
@@ -172,7 +196,20 @@ public final class MgiMeshDataCodec {
         List<MgiSubmeshRange> ranges = convertSubmeshes(meshData.submeshes(), indices.length);
         MgiAabb bounds = toMgiAabb(meshData);
         MgiCanonicalMetadata metadata = canonicalMetadata(meshData, packedPositions);
-        return new MgiStaticMesh(packedPositions, packedNormals, packedUv0, bounds, metadata, null, null, null, indices, ranges);
+        MgiRayTracingData rayTracingData = canonicalRayTracingData(ranges);
+        return new MgiStaticMesh(
+            packedPositions,
+            packedNormals,
+            packedUv0,
+            bounds,
+            metadata,
+            null,
+            null,
+            null,
+            rayTracingData,
+            indices,
+            ranges
+        );
     }
 
     public static MeshData toMeshData(MgiStaticMesh mesh) {
@@ -325,6 +362,21 @@ public final class MgiMeshDataCodec {
             flags |= MgiCanonicalMetadata.FLAG_TRUSTED_CANONICAL;
         }
         return new MgiCanonicalMetadata(vertexCount, indexCount, flags);
+    }
+
+    private static MgiRayTracingData canonicalRayTracingData(List<MgiSubmeshRange> ranges) {
+        ArrayList<MgiRayTracingRegion> regions = new ArrayList<>(ranges.size());
+        for (int i = 0; i < ranges.size(); i++) {
+            MgiSubmeshRange range = ranges.get(i);
+            regions.add(new MgiRayTracingRegion(
+                i,
+                range.firstIndex(),
+                range.indexCount(),
+                range.materialSlot(),
+                RayTracingGeometryRegionMetadata.FLAG_OPAQUE
+            ));
+        }
+        return new MgiRayTracingData(regions);
     }
 
     private static boolean isDegenerateFree(int[] indices, float[] positions) {
