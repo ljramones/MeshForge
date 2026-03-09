@@ -211,6 +211,64 @@ public final class MeshPacker {
     }
 
     /**
+     * Stage-level runtime packing profile for reusable/runtime paths.
+     */
+    public static final class RuntimePackProfile {
+        private long totalNs;
+        private long vertexPayloadNs;
+        private long indexPayloadNs;
+        private long submeshMetadataNs;
+
+        /**
+         * Creates an empty profile.
+         */
+        public RuntimePackProfile() {
+        }
+
+        /**
+         * Clears all counters.
+         */
+        public void reset() {
+            totalNs = 0L;
+            vertexPayloadNs = 0L;
+            indexPayloadNs = 0L;
+            submeshMetadataNs = 0L;
+        }
+
+        /**
+         * Returns totalNs.
+         * @return resulting value
+         */
+        public long totalNs() {
+            return totalNs;
+        }
+
+        /**
+         * Returns vertexPayloadNs.
+         * @return resulting value
+         */
+        public long vertexPayloadNs() {
+            return vertexPayloadNs;
+        }
+
+        /**
+         * Returns indexPayloadNs.
+         * @return resulting value
+         */
+        public long indexPayloadNs() {
+            return indexPayloadNs;
+        }
+
+        /**
+         * Returns submeshMetadataNs.
+         * @return resulting value
+         */
+        public long submeshMetadataNs() {
+            return submeshMetadataNs;
+        }
+    }
+
+    /**
      * Small reusable pool for runtime pack workspaces.
      * Callers can own one pool per worker/thread domain to amortize workspace lifetime.
      */
@@ -764,6 +822,41 @@ public final class MeshPacker {
     }
 
     /**
+     * Runtime-oriented path with stage-level profile capture.
+     *
+     * @param mesh source mesh
+     * @param spec pack spec
+     * @param workspace caller-owned workspace/destination
+     * @param profile destination profile
+     */
+    public static void packIntoProfiled(
+        MeshData mesh,
+        PackSpec spec,
+        RuntimePackWorkspace workspace,
+        RuntimePackProfile profile
+    ) {
+        if (profile == null) {
+            throw new NullPointerException("profile");
+        }
+        profile.reset();
+        long totalStart = System.nanoTime();
+
+        long stageStart = System.nanoTime();
+        packVertexPayloadInto(mesh, spec, workspace);
+        profile.vertexPayloadNs = System.nanoTime() - stageStart;
+
+        stageStart = System.nanoTime();
+        packIndexPayloadInto(mesh, spec, workspace);
+        profile.indexPayloadNs = System.nanoTime() - stageStart;
+
+        stageStart = System.nanoTime();
+        captureSubmeshMetadata(mesh, workspace);
+        profile.submeshMetadataNs = System.nanoTime() - stageStart;
+
+        profile.totalNs = System.nanoTime() - totalStart;
+    }
+
+    /**
      * Runtime-oriented vertex payload kernel: writes packed vertex bytes into caller-owned workspace.
      * This excludes index packing and submesh metadata materialization.
      *
@@ -1053,6 +1146,39 @@ public final class MeshPacker {
         packVertexPayloadInto(plan, workspace);
         packIndexPayloadInto(plan, workspace);
         captureSubmeshMetadata(plan, workspace);
+    }
+
+    /**
+     * Runtime packing from a precomputed plan with stage-level profile capture.
+     *
+     * @param plan precomputed runtime plan
+     * @param workspace caller-owned workspace
+     * @param profile destination profile
+     */
+    public static void packPlannedIntoProfiled(
+        RuntimePackPlan plan,
+        RuntimePackWorkspace workspace,
+        RuntimePackProfile profile
+    ) {
+        if (profile == null) {
+            throw new NullPointerException("profile");
+        }
+        profile.reset();
+        long totalStart = System.nanoTime();
+
+        long stageStart = System.nanoTime();
+        packVertexPayloadInto(plan, workspace);
+        profile.vertexPayloadNs = System.nanoTime() - stageStart;
+
+        stageStart = System.nanoTime();
+        packIndexPayloadInto(plan, workspace);
+        profile.indexPayloadNs = System.nanoTime() - stageStart;
+
+        stageStart = System.nanoTime();
+        captureSubmeshMetadata(plan, workspace);
+        profile.submeshMetadataNs = System.nanoTime() - stageStart;
+
+        profile.totalNs = System.nanoTime() - totalStart;
     }
 
     /**

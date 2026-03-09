@@ -44,6 +44,84 @@ public final class Pipelines {
     }
 
     /**
+     * Stage-level runtime pipeline profile for realtime-fast execution.
+     */
+    public static final class RuntimeStageProfile {
+        private long totalNs;
+        private long validateNs;
+        private long removeDegeneratesNs;
+        private long normalsNs;
+        private long tangentsNs;
+        private long boundsNs;
+
+        /**
+         * Creates an empty profile.
+         */
+        public RuntimeStageProfile() {
+        }
+
+        /**
+         * Clears all counters.
+         */
+        public void reset() {
+            totalNs = 0L;
+            validateNs = 0L;
+            removeDegeneratesNs = 0L;
+            normalsNs = 0L;
+            tangentsNs = 0L;
+            boundsNs = 0L;
+        }
+
+        /**
+         * Returns totalNs.
+         * @return resulting value
+         */
+        public long totalNs() {
+            return totalNs;
+        }
+
+        /**
+         * Returns validateNs.
+         * @return resulting value
+         */
+        public long validateNs() {
+            return validateNs;
+        }
+
+        /**
+         * Returns removeDegeneratesNs.
+         * @return resulting value
+         */
+        public long removeDegeneratesNs() {
+            return removeDegeneratesNs;
+        }
+
+        /**
+         * Returns normalsNs.
+         * @return resulting value
+         */
+        public long normalsNs() {
+            return normalsNs;
+        }
+
+        /**
+         * Returns tangentsNs.
+         * @return resulting value
+         */
+        public long tangentsNs() {
+            return tangentsNs;
+        }
+
+        /**
+         * Returns boundsNs.
+         * @return resulting value
+         */
+        public long boundsNs() {
+            return boundsNs;
+        }
+    }
+
+    /**
      * Full realtime prep pipeline.
      * Includes weld and cache optimization for import-time quality/perf.
      */
@@ -57,6 +135,54 @@ public final class Pipelines {
      */
     public static MeshData realtimeFast(MeshData mesh) {
         return MeshPipeline.run(mesh, realtimeFastOps(mesh));
+    }
+
+    /**
+     * Fast realtime prep pipeline with stage-level profile capture.
+     *
+     * @param mesh source mesh
+     * @param profile destination profile
+     * @return processed mesh
+     */
+    public static MeshData realtimeFastProfiled(MeshData mesh, RuntimeStageProfile profile) {
+        if (mesh == null) {
+            throw new NullPointerException("mesh");
+        }
+        if (profile == null) {
+            throw new NullPointerException("profile");
+        }
+        profile.reset();
+        long totalStart = System.nanoTime();
+
+        MeshContext context = new MeshContext();
+        MeshData current = mesh;
+
+        long opStart = System.nanoTime();
+        current = VALIDATE.apply(current, context);
+        profile.validateNs = System.nanoTime() - opStart;
+
+        opStart = System.nanoTime();
+        current = REMOVE_DEGENERATES.apply(current, context);
+        profile.removeDegeneratesNs = System.nanoTime() - opStart;
+
+        if (!current.has(AttributeSemantic.NORMAL, 0)) {
+            opStart = System.nanoTime();
+            current = Ops.normals(180f).apply(current, context);
+            profile.normalsNs = System.nanoTime() - opStart;
+        }
+
+        if (current.has(AttributeSemantic.UV, 0) && !current.has(AttributeSemantic.TANGENT, 0)) {
+            opStart = System.nanoTime();
+            current = Ops.tangents().apply(current, context);
+            profile.tangentsNs = System.nanoTime() - opStart;
+        }
+
+        opStart = System.nanoTime();
+        current = BOUNDS.apply(current, context);
+        profile.boundsNs = System.nanoTime() - opStart;
+
+        profile.totalNs = System.nanoTime() - totalStart;
+        return current;
     }
 
     /**
