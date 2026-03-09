@@ -83,6 +83,8 @@
                     <configuration>
                         <source>${maven.compiler.source}</source>
                         <encoding>${project.build.sourceEncoding}</encoding>
+                        <doclint>all,-missing</doclint>
+                        <failOnWarnings>true</failOnWarnings>
                         <additionalOptions>
                             <additionalOption>--enable-preview</additionalOption>
                             <additionalOption>--add-modules</additionalOption>

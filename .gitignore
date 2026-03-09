@@ -30,3 +30,6 @@ replay_pid*
 *.jfr
 perf/results/
 perf/cache/
+
+# Generated mesh ingest sidecars
+*.mgi
