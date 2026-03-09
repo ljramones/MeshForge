@@ -79,25 +79,46 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         System.out.println("prep+queue+transfer timing (median + p95)");
         System.out.printf(Locale.ROOT, "warmup=%d runs=%d maxInflight=%d%n", warmup, runs, maxInflight);
         System.out.println();
-        System.out.println("| Fixture | Prep ms | Queue ms | Transfer ms | Total TTFU ms | Triangles | Upload Bytes | ");
-        System.out.println("|---|---:|---:|---:|---:|---:|---:|");
+        System.out.println("| Fixture | Load ms | Pipeline ms | Plan ms | Pack ms | Bridge ms | Queue ms | Transfer ms | Total TTFU ms | Triangles | Upload Bytes | ");
+        System.out.println("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 
         for (Path fixture : fixtures) {
             Row row = measureFixture(loaders, spec, fixture, warmup, runs, maxInflight);
             System.out.printf(
                 Locale.ROOT,
-                "| `%s` | %.3f (p95 %.3f) | %.3f (p95 %.3f) | %.3f (p95 %.3f) | %.3f (p95 %.3f) | %d | %d |%n",
+                "| `%s` | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %d | %d |%n",
                 row.name,
-                row.prepMedianMs,
-                row.prepP95Ms,
+                row.loadMedianMs,
+                row.pipelineMedianMs,
+                row.planMedianMs,
+                row.packMedianMs,
+                row.bridgeMedianMs,
                 row.queueMedianMs,
-                row.queueP95Ms,
                 row.transferMedianMs,
-                row.transferP95Ms,
                 row.totalMedianMs,
-                row.totalP95Ms,
                 row.triangles,
                 row.uploadBytes
+            );
+        }
+
+        System.out.println();
+        System.out.println("p95 breakdown");
+        System.out.println("| Fixture | Load p95 | Pipeline p95 | Plan p95 | Pack p95 | Bridge p95 | Queue p95 | Transfer p95 | Total TTFU p95 |");
+        System.out.println("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+        for (Path fixture : fixtures) {
+            Row row = measureFixture(loaders, spec, fixture, warmup, runs, maxInflight);
+            System.out.printf(
+                Locale.ROOT,
+                "| `%s` | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f |%n",
+                row.name,
+                row.loadP95Ms,
+                row.pipelineP95Ms,
+                row.planP95Ms,
+                row.packP95Ms,
+                row.bridgeP95Ms,
+                row.queueP95Ms,
+                row.transferP95Ms,
+                row.totalP95Ms
             );
         }
     }
@@ -111,6 +132,11 @@ public final class PrepQueueTransferTtfuFixtureTiming {
         int maxInflight
     ) throws Exception {
         int total = warmup + runs;
+        List<Long> loadNs = new ArrayList<>(runs);
+        List<Long> pipelineNs = new ArrayList<>(runs);
+        List<Long> planNs = new ArrayList<>(runs);
+        List<Long> packNs = new ArrayList<>(runs);
+        List<Long> bridgeNs = new ArrayList<>(runs);
         List<Long> prepNs = new ArrayList<>(runs);
         List<Long> queueNs = new ArrayList<>(runs);
         List<Long> transferNs = new ArrayList<>(runs);
@@ -123,10 +149,18 @@ public final class PrepQueueTransferTtfuFixtureTiming {
             for (int i = 0; i < total; i++) {
                 long t0 = System.nanoTime();
                 MeshData loaded = loaders.load(fixture);
+                long tLoad = System.nanoTime();
+
                 MeshData processed = Pipelines.realtimeFast(loaded);
+                long tPipeline = System.nanoTime();
+
                 MeshPacker.RuntimePackPlan runtimePlan = MeshPacker.buildRuntimePlan(processed, spec);
+                long tPlan = System.nanoTime();
+
                 MeshPacker.RuntimePackWorkspace workspace = new MeshPacker.RuntimePackWorkspace();
                 MeshPacker.packPlannedInto(runtimePlan, workspace);
+                long tPack = System.nanoTime();
+
                 RuntimeGeometryPayload payload =
                     MeshForgeGpuBridge.payloadFromRuntimeWorkspace(runtimePlan.layout(), workspace);
                 GpuGeometryUploadPlan uploadPlan = MeshForgeGpuBridge.buildUploadPlan(payload);
@@ -136,6 +170,11 @@ public final class PrepQueueTransferTtfuFixtureTiming {
                 TransferTiming timing = pending.await();
 
                 if (i >= warmup) {
+                    loadNs.add(tLoad - t0);
+                    pipelineNs.add(tPipeline - tLoad);
+                    planNs.add(tPlan - tPipeline);
+                    packNs.add(tPack - tPlan);
+                    bridgeNs.add(t1 - tPack);
                     prepNs.add(timing.prepNanos());
                     queueNs.add(timing.queueWaitNanos());
                     transferNs.add(timing.transferNanos());
@@ -152,10 +191,36 @@ public final class PrepQueueTransferTtfuFixtureTiming {
             }
         }
 
+        long prepMedian = median(prepNs);
+        long loadMedian = median(loadNs);
+        long pipelineMedian = median(pipelineNs);
+        long planMedian = median(planNs);
+        long packMedian = median(packNs);
+        long bridgeMedian = median(bridgeNs);
+
+        long sumSubPrepMedian = loadMedian + pipelineMedian + planMedian + packMedian + bridgeMedian;
+        if (Math.abs(prepMedian - sumSubPrepMedian) > 2_000_000L) {
+            System.out.printf(
+                Locale.ROOT,
+                "note=%s prep_median_mismatch_ms=%.3f subprep_ms=%.3f%n",
+                fixture.getFileName(),
+                toMs(prepMedian),
+                toMs(sumSubPrepMedian)
+            );
+        }
+
         return new Row(
             fixture.getFileName().toString(),
-            toMs(median(prepNs)),
-            toMs(p95(prepNs)),
+            toMs(loadMedian),
+            toMs(p95(loadNs)),
+            toMs(pipelineMedian),
+            toMs(p95(pipelineNs)),
+            toMs(planMedian),
+            toMs(p95(planNs)),
+            toMs(packMedian),
+            toMs(p95(packNs)),
+            toMs(bridgeMedian),
+            toMs(p95(bridgeNs)),
             toMs(median(queueNs)),
             toMs(p95(queueNs)),
             toMs(median(transferNs)),
@@ -223,8 +288,16 @@ public final class PrepQueueTransferTtfuFixtureTiming {
 
     private record Row(
         String name,
-        double prepMedianMs,
-        double prepP95Ms,
+        double loadMedianMs,
+        double loadP95Ms,
+        double pipelineMedianMs,
+        double pipelineP95Ms,
+        double planMedianMs,
+        double planP95Ms,
+        double packMedianMs,
+        double packP95Ms,
+        double bridgeMedianMs,
+        double bridgeP95Ms,
         double queueMedianMs,
         double queueP95Ms,
         double transferMedianMs,
